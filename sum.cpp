@@ -24,17 +24,20 @@ inline long long sub(long long a, long long b) {
 int computeChecksumAggregation(int n) {
     long long inv2 = (MOD + 1) / 2, total = 0;
     for (long long j = 1; j <= n; ++j) {
-        long long q = n / j, r = n % j;
-        long long j_mod = j % MOD, jm1 = sub(j_mod, 1);
+        long long q = n / j;
+        long long r = n % j;
+        long long j_mod = j % MOD;
+        long long jm1 = sub(j_mod, 1);
         long long full = mul(mul(j_mod, jm1), inv2);
         long long t1 = mul(q % MOD, full);
-        long long r_mod = r % MOD, rp1 = add(r_mod, 1);
+        long long r_mod = r % MOD;
+        long long rp1 = add(r_mod, 1);
         long long t2 = mul(mul(r_mod, rp1), inv2);
         long long block = add(t1, t2);
         total = add(total, block);
     }
     long long answer = mul(2, total);
-    return (int)answer;
+    return static_cast<int>(answer);
 }
 int main() {
     ios::sync_with_stdio(false);
