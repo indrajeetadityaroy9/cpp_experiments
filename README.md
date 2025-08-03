@@ -1,6 +1,6 @@
-# Checksum Aggregation and Custom Vector Implementation
+# Checksum Aggregation, Custom Vector, and HashTable Implementation
 
-This repository contains two C++ implementations:
+This repository contains three C++ implementations:
 
 ## 1. Checksum Aggregation (sum.cpp)
 
@@ -48,6 +48,58 @@ customvector::vector<int> vec;
 vec.push_back(10);
 vec.push_back(20);
 // ...
+```
+
+## 3. Custom HashTable Implementation
+
+Two implementations of a custom hash table with separate chaining for collision resolution:
+
+### Basic Version (hashtable.h)
+
+A straightforward implementation with all required features.
+
+### Optimized Version (hashtable_optimized.h)
+
+An optimized implementation with several performance improvements:
+
+#### Performance Enhancements:
+- Uses FNV-1a hash function for strings, which is faster and provides better distribution
+- Rounds bucket count to powers of 2 for faster modulo operations (bitwise AND instead of division)
+- Implements move semantics for key-value pairs to reduce copying
+- Uses circular buffer for performance tracking to reduce memory allocations
+- Uses C++17 features for better optimization opportunities
+- More efficient memory management
+
+#### Core Operations:
+- `put(key, value)` / `put(key&&, value&&)` - Insert or update key-value pairs (with move support)
+- `get(key)` - Retrieve values by key
+- `remove(key)` - Delete key-value pairs
+- `contains(key)` - Check if a key exists in the table
+
+#### Observation Methods:
+- `get_load_factor()` - Returns the current load factor
+- `get_collision_stats()` - Returns max chain length, average length, and variance
+- `get_performance_metrics()` - Returns average latency and throughput
+- `get_configuration()` - Returns current size, bucket count, and hash function ID
+
+#### Action Execution Methods:
+- `execute_resize(new_size)` - Resize the hash table and rehash all elements
+- `execute_change_hash_function(new_function_id)` - Change hash function and rehash
+- `execute_do_nothing()` - A no-op action
+
+### Usage:
+Compile and run with:
+```bash
+make test          # Run basic version
+make test-optimized # Run optimized version
+```
+Or manually:
+```bash
+g++ -std=c++17 -O3 -o hashtable_test hashtable_test.cpp
+./hashtable_test
+
+g++ -std=c++17 -O3 -o hashtable_optimized_test hashtable_optimized_test.cpp
+./hashtable_optimized_test
 ```
 
 ![Screenshot 2025-07-23 at 3 09 14 PM](https://github.com/user-attachments/assets/88602635-0d0b-41a5-857f-4be98d948f80)
