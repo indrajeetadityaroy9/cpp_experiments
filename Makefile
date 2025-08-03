@@ -1,40 +1,45 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -O3
 
-# Default target
-all: hashtable_test hashtable_optimized_test
+ALL_TARGETS = sum vector_test hashtable_test hashtable_optimized_test
 
-# Build the basic test executable
+all: $(ALL_TARGETS)
+
+sum: sum.cpp
+	$(CXX) $(CXXFLAGS) -o sum sum.cpp
+
+vector_test: vector.cpp
+	$(CXX) $(CXXFLAGS) -o vector_test vector.cpp
+
 hashtable_test: hashtable_test.cpp hashtable.h
 	$(CXX) $(CXXFLAGS) -o hashtable_test hashtable_test.cpp
 
-# Build the optimized test executable
 hashtable_optimized_test: hashtable_optimized_test.cpp hashtable_optimized.h
 	$(CXX) $(CXXFLAGS) -o hashtable_optimized_test hashtable_optimized_test.cpp
 
-# Run the basic test
-test: hashtable_test
+test-all: $(ALL_TARGETS)
+	@echo "Running checksum aggregation test:"
+	./sum
+	@echo "\nRunning vector test:"
+	./vector_test
+	@echo "\nRunning basic hashtable test:"
 	./hashtable_test
-
-# Run the optimized test
-test-optimized: hashtable_optimized_test
+	@echo "\nRunning optimized hashtable test:"
 	./hashtable_optimized_test
 
-# Clean build artifacts
+test-sum: sum
+	./sum
+
+test-vector: vector_test
+	./vector_test
+
+test-hashtable: hashtable_test
+	./hashtable_test
+
+test-hashtable-optimized: hashtable_optimized_test
+	./hashtable_optimized_test
+
 clean:
-	rm -f hashtable_test hashtable_optimized_test
+	rm -f $(ALL_TARGETS)
 
-# Help
-help:
-	@echo "Makefile for HashTable implementation"
-	@echo ""
-	@echo "Targets:"
-	@echo "  all              - Build both test executables (default)"
-	@echo "  hashtable_test   - Build the basic test"
-	@echo "  hashtable_optimized_test - Build the optimized test"
-	@echo "  test             - Build and run the basic test"
-	@echo "  test-optimized   - Build and run the optimized test"
-	@echo "  clean            - Remove build artifacts"
-	@echo "  help             - Show this help message"
-
-.PHONY: all test test-optimized clean help
+.PHONY: all test-all test-sum test-vector test-hashtable test-hashtable-optimized clean
