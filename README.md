@@ -1,8 +1,6 @@
 # Checksum Aggregation, Custom Vector, and HashTable Implementation
 
-This repository contains three C++ implementations:
-
-## 1. Checksum Aggregation (sum.cpp)
+## 1. Checksum Aggregation (checksum_aggregation/sum.cpp)
 
 An efficient algorithm for computing a checksum aggregation using modular arithmetic.
 
@@ -14,15 +12,10 @@ An efficient algorithm for computing a checksum aggregation using modular arithm
 
 The algorithm computes a checksum based on a specific aggregation formula that processes pairs of numbers in a range.
 
-### Usage:
-Compile and run with:
-```bash
-g++ -o sum sum.cpp
-./sum
-```
-Then input an integer n to compute the checksum aggregation.
+![Screenshot 2025-07-23 at 3 09 14 PM](https://github.com/user-attachments/assets/88602635-0d0b-41a5-857f-4be98d948f80)
+![Screenshot 2025-07-23 at 3 09 21 PM](https://github.com/user-attachments/assets/9cc193b0-8fee-40c0-9f37-554786861fcd)
 
-## 2. Custom Vector Implementation (vector.cpp)
+## 2. Custom Vector Implementation (custom_vector/vector.cpp)
 
 A custom implementation of a dynamic array container similar to std::vector.
 
@@ -35,30 +28,15 @@ A custom implementation of a dynamic array container similar to std::vector.
 - Methods including push_back, pop_back, at, shrinkToFit, etc.
 - Copy and move constructors and assignment operators
 
-### Usage:
-Compile and run with:
-```bash
-g++ -std=c++11 -o vector_test vector.cpp
-./vector_test
-```
-
-### Example:
-```cpp
-customvector::vector<int> vec;
-vec.push_back(10);
-vec.push_back(20);
-// ...
-```
-
 ## 3. Custom HashTable Implementation
 
 Two implementations of a custom hash table with separate chaining for collision resolution:
 
-### Basic Version (hashtable.h)
+### Basic Version (hashtable/hashtable.h)
 
 A straightforward implementation with all required features.
 
-### Optimized Version (hashtable_optimized.h)
+### Optimized Version (hashtable/optimized/hashtable_optimized.h)
 
 An optimized implementation with several performance improvements:
 
@@ -86,21 +64,3 @@ An optimized implementation with several performance improvements:
 - `execute_resize(new_size)` - Resize the hash table and rehash all elements
 - `execute_change_hash_function(new_function_id)` - Change hash function and rehash
 - `execute_do_nothing()` - A no-op action
-
-### Usage:
-Compile and run with:
-```bash
-make test          # Run basic version
-make test-optimized # Run optimized version
-```
-Or manually:
-```bash
-g++ -std=c++17 -O3 -o hashtable_test hashtable_test.cpp
-./hashtable_test
-
-g++ -std=c++17 -O3 -o hashtable_optimized_test hashtable_optimized_test.cpp
-./hashtable_optimized_test
-```
-
-![Screenshot 2025-07-23 at 3 09 14 PM](https://github.com/user-attachments/assets/88602635-0d0b-41a5-857f-4be98d948f80)
-![Screenshot 2025-07-23 at 3 09 21 PM](https://github.com/user-attachments/assets/9cc193b0-8fee-40c0-9f37-554786861fcd)

@@ -5,17 +5,17 @@ ALL_TARGETS = sum vector_test hashtable_test hashtable_optimized_test
 
 all: $(ALL_TARGETS)
 
-sum: sum.cpp
-	$(CXX) $(CXXFLAGS) -o sum sum.cpp
+sum: checksum_aggregation/sum.cpp
+	$(CXX) $(CXXFLAGS) -o sum checksum_aggregation/sum.cpp
 
-vector_test: vector.cpp
-	$(CXX) $(CXXFLAGS) -o vector_test vector.cpp
+vector_test: custom_vector/vector.cpp
+	$(CXX) $(CXXFLAGS) -o vector_test custom_vector/vector.cpp
 
-hashtable_test: hashtable_test.cpp hashtable.h
-	$(CXX) $(CXXFLAGS) -o hashtable_test hashtable_test.cpp
+hashtable_test: hashtable/hashtable_test.cpp hashtable/hashtable.h
+	$(CXX) $(CXXFLAGS) -o hashtable_test hashtable/hashtable_test.cpp
 
-hashtable_optimized_test: hashtable_optimized_test.cpp hashtable_optimized.h
-	$(CXX) $(CXXFLAGS) -o hashtable_optimized_test hashtable_optimized_test.cpp
+hashtable_optimized_test: hashtable/optimized/hashtable_optimized_test.cpp hashtable/optimized/hashtable_optimized.h
+	$(CXX) $(CXXFLAGS) -o hashtable_optimized_test hashtable/optimized/hashtable_optimized_test.cpp
 
 test-all: $(ALL_TARGETS)
 	@echo "Running checksum aggregation test:"
