@@ -1,6 +1,6 @@
 # C++ experiments and paper implementations
 
-## 1. Checksum Aggregation (checksum_aggregation/sum.cpp)
+## 1. Checksum Aggregation
 
 An efficient algorithm for computing a checksum aggregation using modular arithmetic.
 
@@ -14,7 +14,7 @@ The algorithm computes a checksum based on a specific aggregation formula that p
 ![Screenshot 2025-07-23 at 3 09 14 PM](https://github.com/user-attachments/assets/88602635-0d0b-41a5-857f-4be98d948f80)
 ![Screenshot 2025-07-23 at 3 09 21 PM](https://github.com/user-attachments/assets/9cc193b0-8fee-40c0-9f37-554786861fcd)
 
-## 2. Custom Vector Implementation (custom_vector/vector.cpp)
+## 2. Custom Vector Implementation
 
 A custom implementation of a dynamic array container similar to std::vector.
 
@@ -31,11 +31,11 @@ A custom implementation of a dynamic array container similar to std::vector.
 
 Two implementations of a custom hash table with separate chaining for collision resolution:
 
-### Basic Version (hashtable/hashtable.h)
+### Basic Version
 
 A straightforward implementation with all required features.
 
-### Optimized Version (hashtable/optimized/hashtable_optimized.h)
+### Optimized Version
 
 An optimized implementation with several performance improvements:
 
