@@ -1,4 +1,4 @@
-# Checksum Aggregation, Custom Vector, and HashTable Implementation
+# C++ experiments and paper implementations
 
 ## 1. Checksum Aggregation (checksum_aggregation/sum.cpp)
 
@@ -8,7 +8,6 @@ An efficient algorithm for computing a checksum aggregation using modular arithm
 - Uses modular arithmetic with MOD = 1000000007 to prevent integer overflow
 - Implements optimized modular multiplication, addition, and subtraction
 - Calculates checksum using a mathematical formula with O(n) time complexity
-- Includes fast I/O optimizations for competitive programming scenarios
 
 The algorithm computes a checksum based on a specific aggregation formula that processes pairs of numbers in a range.
 
