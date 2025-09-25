@@ -1,13 +1,34 @@
-## Breaking the Sorting Barrier for Directed Single-Source Shortest Paths
-Based on the paper: https://arxiv.org/abs/2504.17033v2
+# Faster Dijkstra
 
-Attempted implementation for provides a deterministic single-source shortest path algorithm
-with O(m*log^(2/3)*n) time complexity, which is theoretically faster than Dijkstra's
-O(m+n*log*n) algorithm on sparse graphs where m = O(n).
+Experiments around single-source shortest paths inspired by *Breaking the Sorting Barrier for Directed SSSP* ([arXiv:2504.17033v2](https://arxiv.org/abs/2504.17033)). The directory contrasts a classical Dijkstra implementation with a work-in-progress port of the Duan–Mehlhorn–Shao–Su–Zhang deterministic algorithm and several benchmarking harnesses.
 
-Despite the better theoretical complexity, the Duan implementation is not consistently faster than standard Dijkstra's algorithm in practice.The PartialOrderDS data structure is much more complex than a simple priority queue. Multiple levels of recursion add function call overhead.Complex memory access patterns affect cache performance
+## Components
 
-The theoretical advantage only applies when:
-- Graphs are very sparse (m = O(n))
-- The number of edges is below the crossover point (m_crit)
-- Benchmarks show m_crit values in the tens of thousands, which is quite high
+- `dijkstra.cpp`: baseline routine with a degree-reduction pre-processing step.
+- `Duan_deterministic_sssp.cpp`: prototype of the paper's algorithm including the bespoke `PartialOrderDS` structure.
+- `benchmark.cpp`: generates random graphs, runs both algorithms, and cross-validates results.
+- `benchmark_parallel.cpp`: OpenMP-enabled flavour for multi-thread experiments.
+- `Makefile`: builds the executables (`dijkstra`, `duan_sssp`, `benchmark`, `benchmark_parallel`, and test utilities).
+- `test_graph.txt`: small sample input for sanity checks.
+
+## Build & Run
+
+From this directory:
+
+```sh
+make               # builds all binaries
+./dijkstra < test_graph.txt
+./duan_sssp < test_graph.txt
+./benchmark 1000 5000
+./benchmark_parallel 1000 5000
+```
+
+Executables expect `n m source` headers when reading from stdin; the benchmark variants take `n` and `m` as command-line parameters and generate random graphs internally.
+
+## Observations
+
+- The Duan prototype matches theoretical complexity on paper but currently loses to classical Dijkstra on most practical inputs.
+- `PartialOrderDS` introduces deep recursion and cache-unfriendly access patterns that dominate runtime at moderate graph sizes.
+- The expected crossover point (`m_crit`) occurs only on very sparse graphs with tens of thousands of edges, making empirical wins hard to reproduce.
+
+Use these experiments as a sandbox for profiling, algorithm tweaks, or alternative data structures.
