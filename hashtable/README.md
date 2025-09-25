@@ -14,16 +14,3 @@ Both are paired with console drivers (`hashtable_test.cpp` and `optimized/hashta
 - Runtime instrumentation: rolling latency and throughput metrics
 - Administrative helpers to resize, swap hash functions, or no-op
 
-## Build & Run
-
-From this directory:
-
-```sh
-make           # builds hashtable_test
-./hashtable_test
-
-make optimized # builds the optimized variant via sub-make
-./optimized/hashtable_optimized_test
-```
-
-See [`optimized/README.md`](optimized/README.md) for details specific to the tuned implementation.

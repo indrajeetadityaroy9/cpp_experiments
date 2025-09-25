@@ -9,19 +9,3 @@ A minimal `std::vector` look-alike designed to practice manual memory management
 - Move semantics and `shrinkToFit` to exercise ownership transfers.
 - Simple console program (`vector.cpp`) that drives the container with integers and strings.
 
-## Build & Run
-
-From this directory:
-
-```sh
-make
-./vector_test
-```
-
-Or compile manually:
-
-```sh
-g++ -std=c++17 -O3 -Wall -Wextra vector.cpp -o vector_test
-```
-
-The sample output demonstrates growth behaviour, element access through `at`, and copy construction.

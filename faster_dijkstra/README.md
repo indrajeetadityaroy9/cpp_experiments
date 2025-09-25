@@ -11,20 +11,6 @@ Experiments around single-source shortest paths inspired by *Breaking the Sortin
 - `Makefile`: builds the executables (`dijkstra`, `duan_sssp`, `benchmark`, `benchmark_parallel`, and test utilities).
 - `test_graph.txt`: small sample input for sanity checks.
 
-## Build & Run
-
-From this directory:
-
-```sh
-make               # builds all binaries
-./dijkstra < test_graph.txt
-./duan_sssp < test_graph.txt
-./benchmark 1000 5000
-./benchmark_parallel 1000 5000
-```
-
-Executables expect `n m source` headers when reading from stdin; the benchmark variants take `n` and `m` as command-line parameters and generate random graphs internally.
-
 ## Observations
 
 - The Duan prototype matches theoretical complexity on paper but currently loses to classical Dijkstra on most practical inputs.

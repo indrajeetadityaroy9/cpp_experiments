@@ -8,21 +8,6 @@ Efficient checksum calculator that keeps every operation in modular arithmetic t
 - Computes the aggregation in `O(n)` by grouping contributions into blocks derived from `floor(n / j)`.
 - Exposes the core routine via `computeChecksumAggregation(int n)` and a tiny CLI that reads `n` from stdin and prints the checksum.
 
-## Build & Run
-
-From this directory:
-
-```sh
-make
-./sum < input.txt
-```
-
-You can also compile the file directly:
-
-```sh
-g++ -std=c++17 -O3 -Wall -Wextra sum.cpp -o sum
-```
-
 ## Example
 
 ```
