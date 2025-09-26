@@ -1,9 +1,10 @@
 #ifndef LRU_H
 #define LRU_H
 
-#include <unordered_map>
+#include <algorithm>
+#include <optional>
 #include <string>
-#include <cstdlib>
+#include <unordered_map>
 
 template<typename T>
 class LRUCache {
@@ -33,12 +34,14 @@ private:
 public:
     explicit LRUCache(int item_limit);
     ~LRUCache();
-    bool has(const std::string& key);
-    T get(const std::string& key);
+    bool has(const std::string& key) const;
+    std::optional<T> get(const std::string& key);
     void set(const std::string& key, const T& value);
     
     LRUCache(const LRUCache&) = delete;
     LRUCache& operator=(const LRUCache&) = delete;
 };
+
+#include "lru.tpp"
 
 #endif

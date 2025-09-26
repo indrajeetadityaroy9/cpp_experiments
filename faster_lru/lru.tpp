@@ -1,11 +1,6 @@
-#include "lru.h"
-#include <algorithm>
-#include <new>
-
 template<typename T>
-LRUCache<T>::LRUCache(int item_limit) : capacity(std::max(0, item_limit)), size(0) {
-    head = new Node();
-    tail = new Node();
+LRUCache<T>::LRUCache(int item_limit)
+    : capacity(std::max(0, item_limit)), head(new Node()), tail(new Node()), size(0) {
     head->next = tail;
     tail->prev = head;
 }
@@ -45,20 +40,15 @@ typename LRUCache<T>::Node* LRUCache<T>::popLRU() {
 }
 
 template<typename T>
-bool LRUCache<T>::has(const std::string& key) {
-    auto it = map.find(key);
-    if (it == map.end()) {
-        return false;
-    }
-    moveToHead(it->second);
-    return true;
+bool LRUCache<T>::has(const std::string& key) const {
+    return map.find(key) != map.end();
 }
 
 template<typename T>
-T LRUCache<T>::get(const std::string& key) {
+std::optional<T> LRUCache<T>::get(const std::string& key) {
     auto it = map.find(key);
     if (it == map.end()) {
-        return T{};
+        return std::nullopt;
     }
     moveToHead(it->second);
     return it->second->value;
@@ -72,24 +62,24 @@ void LRUCache<T>::set(const std::string& key, const T& value) {
         }
         return;
     }
-    
+
     auto it = map.find(key);
     if (it != map.end()) {
         it->second->value = value;
         moveToHead(it->second);
         return;
     }
-    
+
     Node* newNode = new Node(key, value);
-    map[key] = newNode;
+    map.emplace(key, newNode);
     addAfterHead(newNode);
-    size++;
-    
+    ++size;
+
     if (size > capacity) {
         Node* lruNode = popLRU();
         map.erase(lruNode->key);
         delete lruNode;
-        size--;
+        --size;
     }
 }
 
@@ -101,13 +91,9 @@ void LRUCache<T>::clearAll() {
         delete current;
         current = next;
     }
-    
+
     head->next = tail;
     tail->prev = head;
     map.clear();
     size = 0;
 }
-
-template class LRUCache<int>;
-template class LRUCache<std::string>;
-template class LRUCache<double>;

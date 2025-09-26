@@ -8,7 +8,11 @@ int main() {
     cache.set("key2", "value2");
     cache.set("key3", "value3");
     
-    std::cout << "key1: " << cache.get("key1") << std::endl;
+    if (auto value = cache.get("key1")) {
+        std::cout << "key1: " << *value << std::endl;
+    } else {
+        std::cout << "key1 missing" << std::endl;
+    }
     cache.set("key4", "value4");
     std::cout << "key1 present: " << (cache.has("key1") ? "yes" : "no") << std::endl;
     std::cout << "key2 present: " << (cache.has("key2") ? "yes" : "no") << std::endl;
