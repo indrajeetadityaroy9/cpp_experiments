@@ -15,8 +15,8 @@ namespace customvector {
             try{
                 for(std::size_t i=0; i<other.size_; i++){
                     new (data_+i) Element(other.data_[i]);
+                    ++size_;
                 }
-                size_ = other.size_;
             }catch(...){
                 destroy_elements(0,size_);
                 ::operator delete(data_);
@@ -65,9 +65,6 @@ namespace customvector {
             }
             new (data_ + size_) Element(std::move(element));
             ++size_;
-            if(size_ == capacity_){
-                grow();
-            }
         }
         const Element& at(std::size_t index) const {
             if(index >= size_){
@@ -89,8 +86,17 @@ namespace customvector {
             Element* newData = nullptr;
             if(newCap != 0){
                 newData = static_cast<Element*>(::operator new(newCap*sizeof(Element)));
-                for(std::size_t i=0; i<size_;i++){
-                    new (newData+i) Element(std::move_if_noexcept(data_[i]));
+                std::size_t constructed = 0;
+                try{
+                    for(; constructed<size_; ++constructed){
+                        new (newData+constructed) Element(std::move_if_noexcept(data_[constructed]));
+                    }
+                }catch(...){
+                    for(std::size_t i=constructed; i>0; --i){
+                        newData[i-1].~Element();
+                    }
+                    ::operator delete(newData);
+                    throw;
                 }
             }
             destroy_elements(0,size_);
@@ -109,9 +115,17 @@ namespace customvector {
       void grow(){
         std::size_t newCap = (capacity_ == 0) ? 1 : capacity_*3;
         Element* newData = static_cast<Element*>(::operator new(newCap*sizeof(Element)));
-
-        for(std::size_t i=0; i<size_; i++){
-            new (newData+i) Element(std::move_if_noexcept(data_[i]));
+        std::size_t constructed = 0;
+        try{
+            for(; constructed<size_; ++constructed){
+                new (newData+constructed) Element(std::move_if_noexcept(data_[constructed]));
+            }
+        }catch(...){
+            for(std::size_t i=constructed; i>0; --i){
+                newData[i-1].~Element();
+            }
+            ::operator delete(newData);
+            throw;
         }
         destroy_elements(0,size_);
         ::operator delete(data_);
@@ -139,6 +153,7 @@ namespace customvector {
     };
 }
 
+#ifdef CUSTOMVECTOR_ENABLE_DEMO
 #include <iostream>
 #include <string>
 
@@ -199,3 +214,4 @@ int main() {
     
     return 0;
 }
+#endif // CUSTOMVECTOR_ENABLE_DEMO
