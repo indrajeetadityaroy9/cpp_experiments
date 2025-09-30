@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -pedantic -O3
+CXXFLAGS = -std=c++23 -Wall -Wextra -pedantic -O3
 TARGET = lru_example
 PERF_TEST = performance_test
 SRCS = main.cpp
