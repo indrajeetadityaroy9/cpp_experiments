@@ -1,16 +1,6 @@
 # Hashtable Playground
 
-Two flavours of separate-chaining hash tables explore different trade-offs between simplicity and throughput:
+Two template-based hash table implementations using separate chaining for collision resolution, each optimized for different use cases:
 
-- `hashtable.h` implements a straightforward version with dynamically sized vectors for metrics tracking.
-- `optimized/` hosts a more performance-lean variant that favours power-of-two bucket counts, string-specific hashing, and fixed-size telemetry buffers.
-
-Both are paired with console drivers (`hashtable_test.cpp` and `optimized/hashtable_optimized_test.cpp`) that exercise the full API and print diagnostic information.
-
-## Core API
-
-- `put`, `get`, `contains`, `remove`
-- Load-factor inspection and collision statistics
-- Runtime instrumentation: rolling latency and throughput metrics
-- Administrative helpers to resize, swap hash functions, or no-op
+- **Base Implementation** (`hashtable.h` + `hashtable.tpp`): Generic implementation supporting key/value types and flexible bucket sizing using `std::vector`.
 
