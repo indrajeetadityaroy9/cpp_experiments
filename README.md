@@ -1,6 +1,5 @@
 # C++ Experiments
-
-C++17 experiments exploring data structures and performance-based algorithms.
+Implementation experiments exploring performance-based data structures.
 
 ## Projects
 
