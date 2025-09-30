@@ -54,7 +54,6 @@ struct DegreeReduction {
 
         for (int v = 0; v < n; v++) {
             if (!slot_id[v].empty()) {
-                // Choose a deterministic representative: smallest neighbor id
                 int min_nbr = numeric_limits<int>::max();
                 for (const auto &kv : slot_id[v]) {
                     if (kv.first < min_nbr) min_nbr = kv.first;

@@ -15,7 +15,6 @@
 using namespace std;
 using namespace std::chrono;
 
-// External APIs implemented in dijkstra.cpp and Duan_deterministic_sssp.cpp
 expected<vector<long double>, string>
 shortest_paths_original_graph(int n, span<const tuple<int,int,long double>> edges, int source);
 
@@ -80,7 +79,7 @@ int main(int argc, char* argv[]) {
 
     cout << "\n--- Running Duan et al. (deterministic) ---\n";
     auto t1 = high_resolution_clock::now();
-    auto duan_res = duan_shortest_paths_original_graph(n, span(edges), s, /*finalize_pass=*/true);
+    auto duan_res = duan_shortest_paths_original_graph(n, span(edges), s, true);
     auto t2 = high_resolution_clock::now();
     if (!duan_res) {
         cerr << "Duan API error: " << duan_res.error() << '\n';
