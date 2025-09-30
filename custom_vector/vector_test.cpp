@@ -90,3 +90,67 @@ TEST_CASE("shrinkToFit and pop_back adjust size/capacity", "[vector]") {
     words.shrinkToFit();
     REQUIRE(words.getCapacity() == words.getSize());
 }
+
+TEST_CASE("C++23 std::expected get_checked returns value or error", "[vector][cpp23]") {
+    vector<int> values;
+    values.push_back(10);
+    values.push_back(20);
+    values.push_back(30);
+
+    SECTION("valid index returns expected value") {
+        auto result = values.get_checked(0);
+        REQUIRE(result.has_value());
+        REQUIRE(result.value() == 10);
+
+        auto result2 = values.get_checked(2);
+        REQUIRE(result2.has_value());
+        REQUIRE(result2.value() == 30);
+    }
+
+    SECTION("invalid index returns error") {
+        auto result = values.get_checked(5);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(result.error() == customvector::VectorError::IndexOutOfBounds);
+    }
+}
+
+TEST_CASE("empty() method works correctly", "[vector][cpp23]") {
+    vector<int> values;
+
+    REQUIRE(values.empty());
+
+    values.push_back(1);
+    REQUIRE_FALSE(values.empty());
+
+    values.pop_back();
+    REQUIRE(values.empty());
+}
+
+TEST_CASE("iterator support enables range-based for loops", "[vector][cpp23]") {
+    vector<int> values;
+    values.push_back(10);
+    values.push_back(20);
+    values.push_back(30);
+
+    SECTION("range-based for loop") {
+        int sum = 0;
+        for (const auto& val : values) {
+            sum += val;
+        }
+        REQUIRE(sum == 60);
+    }
+
+    SECTION("begin and end iterators") {
+        REQUIRE(*values.begin() == 10);
+        REQUIRE(*(values.end() - 1) == 30);
+    }
+
+    SECTION("const iterators") {
+        const vector<int>& const_values = values;
+        int count = 0;
+        for (auto it = const_values.cbegin(); it != const_values.cend(); ++it) {
+            ++count;
+        }
+        REQUIRE(count == 3);
+    }
+}

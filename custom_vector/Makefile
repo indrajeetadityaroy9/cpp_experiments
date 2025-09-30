@@ -1,5 +1,5 @@
 CXX := g++
-CXXFLAGS := -std=c++17 -O3 -Wall -Wextra
+CXXFLAGS := -std=c++23 -O3 -Wall -Wextra
 
 TARGET := vector_test
 SRCS := vector_test.cpp vendor/catch_amalgamated.cpp

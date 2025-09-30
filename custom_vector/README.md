@@ -1,11 +1,15 @@
 # Custom Vector
+A minimal `std::vector` look-alike implementation for practicing manual memory management, exception safety, and move semantics.
 
-A minimal `std::vector` look-alike designed to practice manual memory management, exception safety, and move semantics. The `customvector::vector<T>` template exposes a subset of the familiar API while keeping the implementation approachable.
+- Manual memory control using `operator new`/`delete` and placement new
+- Exception-safe operations with copy-and-swap
+- Move semantics with `shrinkToFit`
+- C++23 features: `[[nodiscard]]`, `constexpr`, `std::expected`, concepts, iterators
+- Practice tests using Catch2 framework (vendored in `vendor/`) (https://github.com/catchorg/Catch2)
 
-## Features
-
-- Manual storage control with `operator new` / `operator delete` and placement new for element construction.
-- Strong exception guarantees via copy-and-swap and best-effort cleanup on failures.
-- Move semantics and `shrinkToFit` to exercise ownership transfers.
-- Simple console program (`vector.cpp`) that drives the container with integers and strings.
-
+Tests cover:
+- Basic operations (push, pop, access)
+- Copy and move semantics
+- Exception handling with `at()`
+- C++23 `std::expected` error handling with `get_checked()`
+- Iterators and range-based for loops
