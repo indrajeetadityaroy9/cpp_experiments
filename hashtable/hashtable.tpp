@@ -18,12 +18,12 @@ namespace customhashtable {
 
     template <typename Key, typename Value>
     HashTable<Key, Value>::HashTable(HashTable&& other) noexcept
-        : buckets_(move(other.buckets_)),
+        : buckets_(std::move(other.buckets_)),
           size_(other.size_),
           bucket_count_(other.bucket_count_),
           active_hash_function_id_(other.active_hash_function_id_),
-          operation_timestamps_(move(other.operation_timestamps_)),
-          operation_latencies_ms_(move(other.operation_latencies_ms_)) {
+          operation_timestamps_(std::move(other.operation_timestamps_)),
+          operation_latencies_ms_(std::move(other.operation_latencies_ms_)) {
         other.size_ = 0;
         other.bucket_count_ = 0;
         other.active_hash_function_id_ = 1;
@@ -42,12 +42,12 @@ namespace customhashtable {
     HashTable<Key, Value>& HashTable<Key, Value>::operator=(HashTable&& other) noexcept {
         if (this != &other) {
             destroy_buckets();
-            buckets_ = move(other.buckets_);
+            buckets_ = std::move(other.buckets_);
             size_ = other.size_;
             bucket_count_ = other.bucket_count_;
             active_hash_function_id_ = other.active_hash_function_id_;
-            operation_timestamps_ = move(other.operation_timestamps_);
-            operation_latencies_ms_ = move(other.operation_latencies_ms_);
+            operation_timestamps_ = std::move(other.operation_timestamps_);
+            operation_latencies_ms_ = std::move(other.operation_latencies_ms_);
             other.size_ = 0;
             other.bucket_count_ = 0;
             other.active_hash_function_id_ = 1;
@@ -301,7 +301,7 @@ namespace customhashtable {
 
     template <typename Key, typename Value>
     void HashTable<Key, Value>::rehash() {
-        vector<Node*> old_buckets = move(buckets_);
+        vector<Node*> old_buckets = std::move(buckets_);
         size_t old_bucket_count = old_buckets.size();
         size_t new_size = 0;
         buckets_.clear();
