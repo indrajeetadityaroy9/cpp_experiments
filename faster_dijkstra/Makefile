@@ -1,35 +1,15 @@
-CXX = g++
-CXXFLAGS = -std=c++17 -O2 -Wall -Wextra
+CXX ?= g++
+CXXFLAGS ?= -std=c++23 -O2 -Wall -Wextra
 
-# Default target
-all: dijkstra duan_sssp test_harness sparse_graph_test
+all: benchmark
 
-# Build the standard Dijkstra implementation
-dijkstra: dijkstra.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
+benchmark: benchmark.cpp dijkstra.cpp Duan_deterministic_sssp.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $^
 
-# Build the Duan deterministic SSSP implementation
-duan_sssp: Duan_deterministic_sssp.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
+run: benchmark
+	./benchmark 5000 20000
 
-# Build the test harness
-test_harness: test_harness.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
-
-# Build the sparse graph test
-sparse_graph_test: sparse_graph_test.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
-
-# Run all tests
-test: dijkstra duan_sssp test_harness
-	./test_harness
-
-# Run sparse graph tests
-sparse-test: dijkstra duan_sssp sparse_graph_test
-	./sparse_graph_test
-
-# Clean up
 clean:
-	rm -f dijkstra duan_sssp test_harness sparse_graph_test
+	rm -f benchmark
 
-.PHONY: all test perf sparse-test clean
+.PHONY: all run clean

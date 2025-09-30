@@ -12,6 +12,9 @@
 #include <algorithm>
 #include <cmath>
 #include <stack>
+#include <expected>
+#include <span>
+#include <string>
 using namespace std;
 
 struct Edge { int to; long double w; };
@@ -44,7 +47,7 @@ struct DegreeReduction {
         rep_of_orig.assign(n, -1);
     }
 
-    void build(int n, const vector<tuple<int, int, long double>>& edges) {
+    void build(int n, span<const tuple<int, int, long double>> edges) {
         vector<unordered_set<int>> nbr(n);
         for (const auto& e : edges) {
             int u, v;
@@ -763,66 +766,52 @@ struct DMSY_SSSP {
     }
 
     // Run the complete algorithm
-    void run() {
+    void run(bool finalize_pass = true) {
         long double Lg = log2l((long double)max(2, N));
         int l_top = (int)ceil(Lg / (long double)max(1, t));
         vector<int> S0 = {s};
         BMSSP(l_top, INF_LD, S0);
-        finalize_with_dijkstra();
+        if (finalize_pass) finalize_with_dijkstra();
     }
 };
 
-int main() {
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
+// Library-style API: run Duan–Mehlhorn–Shao–Su–Yin SSSP on the transformed graph
+[[nodiscard]] vector<long double> duan_sssp_transformed(const Graph& g, int source_slot, bool finalize_pass = true) {
+    DMSY_SSSP algo(g, source_slot);
+    algo.run(finalize_pass);
+    return algo.L.db;
+}
 
-    int n, m, s_orig;
-    if (!(cin >> n >> m >> s_orig)) 
-        return 0;
-        
-    vector<tuple<int, int, long double>> edges;
-    edges.reserve(m);
-    
-    bool has_negative = false;
-    for (int i = 0; i < m; i++) {
-        int u, v;
-        long double w;
-        cin >> u >> v >> w;
-        if (w < 0) 
-            has_negative = true;
-        edges.emplace_back(u, v, w);
-    }
-    
-    if (has_negative) {
-        cerr << "Error: negative edge weights are not allowed in this algorithm.\n";
-        return 1;
+// Top-level API matching dijkstra.cpp: on original graph inputs
+[[nodiscard]] expected<vector<long double>, string>
+duan_shortest_paths_original_graph(
+    int n,
+    span<const tuple<int,int,long double>> edges,
+    int source,
+    bool finalize_pass = true) {
+    if (n < 0) return unexpected(string("n must be non-negative"));
+    if (source < 0 || source >= n) return unexpected(string("invalid source index"));
+    for (const auto& e : edges) {
+        int u,v; long double w; tie(u,v,w) = e;
+        if (u < 0 || u >= n || v < 0 || v >= n)
+            return unexpected(string("edge endpoint out of range"));
+        if (w < 0) return unexpected(string("negative edge weights are not allowed"));
     }
 
-    DegreeReduction DR(n);
-    DR.build(n, edges);
-    int s_rep = DR.rep_of_orig[s_orig];
+    DegreeReduction dr(n);
+    dr.build(n, edges);
+    const int s_rep = dr.rep_of_orig[source];
 
-    DMSY_SSSP algo(DR.Gt, s_rep);
-    algo.run();
+    vector<long double> dist_transformed = duan_sssp_transformed(dr.Gt, s_rep, finalize_pass);
 
     vector<long double> dist_orig(n, INF_LD);
     for (int v = 0; v < n; ++v) {
         long double best = INF_LD;
-        if (!DR.slot_id[v].empty()) {
-            for (const auto& kv : DR.slot_id[v]) 
-                best = min(best, algo.L.db[kv.second]);
+        if (!dr.slot_id[v].empty()) {
+            for (const auto& kv : dr.slot_id[v]) best = min(best, dist_transformed[kv.second]);
         }
         dist_orig[v] = best;
     }
-    dist_orig[s_orig] = min(dist_orig[s_orig], 0.0L);
-
-    cout.setf(std::ios::fixed);
-    cout.precision(12);
-    for (int v = 0; v < n; ++v) {
-        if (dist_orig[v] >= INF_LD) 
-            cout << "INF\n";
-        else 
-            cout << dist_orig[v] << "\n";
-    }
-    return 0;
+    dist_orig[source] = min(dist_orig[source], 0.0L);
+    return dist_orig;
 }

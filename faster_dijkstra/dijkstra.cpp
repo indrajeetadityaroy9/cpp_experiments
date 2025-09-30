@@ -1,39 +1,51 @@
-#include <iostream>
-#include <vector>
-#include <queue>
+#include <algorithm>
+#include <expected>
 #include <limits>
+#include <queue>
+#include <ranges>
+#include <set>
+#include <span>
 #include <tuple>
 #include <unordered_map>
-#include <set>
-#include <algorithm>
+#include <vector>
+#include <string>
+#include <functional>
+
 using namespace std;
 
-struct Edge { int to; long double w; };
+struct Edge {
+    int to;
+    long double w;
+};
+
 using Graph = vector<vector<Edge>>;
 
 static const long double INF_LD = numeric_limits<long double>::infinity();
 
 struct DegreeReduction {
-    vector<unordered_map<int,int>> slot_id;
+    vector<unordered_map<int, int>> slot_id;
     vector<int> rep_of_orig;
-    Graph Gt;                
+    Graph Gt;
 
-    DegreeReduction(int n=0) { slot_id.resize(n); rep_of_orig.assign(n,-1); }
+    explicit DegreeReduction(int n = 0) {
+        slot_id.resize(n);
+        rep_of_orig.assign(n, -1);
+    }
 
-    void build(int n, const vector<tuple<int,int,long double>>& edges, int s_orig) {
+    void build(int n, span<const tuple<int, int, long double>> edges) {
         slot_id.assign(n, {});
         rep_of_orig.assign(n, -1);
-        
-        set<pair<int,int>> edge_set;
-        for (const auto& e : edges) {
+
+        set<pair<int, int>> edge_set;
+        for (const auto &e : edges) {
             int u, v;
             tie(u, v, ignore) = e;
             edge_set.insert({u, v});
             edge_set.insert({v, u});
         }
-        
+
         int Np = 0;
-        for (const auto& p : edge_set) {
+        for (const auto &p : edge_set) {
             int u = p.first, v = p.second;
             if (slot_id[u].find(v) == slot_id[u].end()) {
                 slot_id[u][v] = Np++;
@@ -42,35 +54,41 @@ struct DegreeReduction {
 
         for (int v = 0; v < n; v++) {
             if (!slot_id[v].empty()) {
-                int min_nbr = slot_id[v].begin()->first;
+                // Choose a deterministic representative: smallest neighbor id
+                int min_nbr = numeric_limits<int>::max();
+                for (const auto &kv : slot_id[v]) {
+                    if (kv.first < min_nbr) min_nbr = kv.first;
+                }
                 rep_of_orig[v] = slot_id[v][min_nbr];
             } else {
                 slot_id[v][v] = Np++;
                 rep_of_orig[v] = slot_id[v][v];
             }
         }
-        
+
         Gt.assign(Np, {});
 
         for (int v = 0; v < n; v++) {
             if (slot_id[v].empty()) continue;
-            
-            vector<pair<int, int>> pairs;
-            for (const auto& kv : slot_id[v]) {
-                pairs.push_back({kv.first, kv.second});
-            }
-            sort(pairs.begin(), pairs.end());
 
-            int m = (int)pairs.size();
+            vector<pair<int, int>> pairs;
+            pairs.reserve(slot_id[v].size());
+            for (const auto &kv : slot_id[v]) {
+                pairs.emplace_back(kv.first, kv.second);
+            }
+            ranges::sort(pairs);
+
+            int m = static_cast<int>(pairs.size());
             for (int i = 0; i < m; i++) {
                 int from = pairs[i].second;
                 int to = pairs[(i + 1) % m].second;
                 Gt[from].push_back({to, 0.0L});
             }
         }
-        
-        for (const auto& e : edges) {
-            int u, v; long double w;
+
+        for (const auto &e : edges) {
+            int u, v;
+            long double w;
             tie(u, v, w) = e;
             int xu = slot_id[u][v];
             int xv = slot_id[v][u];
@@ -79,21 +97,22 @@ struct DegreeReduction {
     }
 };
 
-vector<long double> dijkstra(const Graph& g, int s) {
-    const int n = (int)g.size();
+[[nodiscard]] vector<long double> dijkstra(const Graph &g, int s) {
+    const int n = static_cast<int>(g.size());
     vector<long double> dist(n, INF_LD);
-    
-    using Node = pair<long double,int>;
+
+    using Node = pair<long double, int>;
     priority_queue<Node, vector<Node>, greater<Node>> pq;
-    
+
     dist[s] = 0.0L;
     pq.emplace(0.0L, s);
-    
+
     while (!pq.empty()) {
-        auto [du, u] = pq.top(); pq.pop();
+        auto [du, u] = pq.top();
+        pq.pop();
         if (du > dist[u]) continue;
-        
-        for (const auto& e : g[u]) {
+
+        for (const auto &e : g[u]) {
             long double nd = du + e.w;
             if (nd < dist[e.to]) {
                 dist[e.to] = nd;
@@ -104,44 +123,39 @@ vector<long double> dijkstra(const Graph& g, int s) {
     return dist;
 }
 
-int main() {
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
+[[nodiscard]] expected<vector<long double>, string>
+shortest_paths_original_graph(
+    int n,
+    span<const tuple<int, int, long double>> edges,
+    int source) {
+    if (n < 0) return unexpected("n must be non-negative");
+    if (source < 0 || source >= n) return unexpected("invalid source index");
 
-    int n, m, s;
-    if (!(cin >> n >> m >> s)) return 0;
-    vector<tuple<int,int,long double>> edges; edges.reserve(m);
     bool has_negative = false;
-    for (int i=0;i<m;i++) {
-        int u,v; long double w; cin >> u >> v >> w;
+    for (const auto &e : edges) {
+        int u, v;
+        long double w;
+        tie(u, v, w) = e;
+        if (u < 0 || u >= n || v < 0 || v >= n) {
+            return unexpected("edge endpoint out of range");
+        }
         if (w < 0) has_negative = true;
-        edges.emplace_back(u, v, w);
     }
-    if (has_negative) {
-        cerr << "Error: negative edge weights are not allowed.\n";
-        return 1;
-    }
+    if (has_negative) return unexpected("negative edge weights are not allowed");
 
-    DegreeReduction DR(n);
-    DR.build(n, edges, s);
-    int s_rep = DR.rep_of_orig[s];
+    DegreeReduction dr(n);
+    dr.build(n, edges);
+    const int s_rep = dr.rep_of_orig[source];
 
-    vector<long double> dist_transformed = dijkstra(DR.Gt, s_rep);
+    vector<long double> dist_transformed = dijkstra(dr.Gt, s_rep);
 
     vector<long double> dist_orig(n, INF_LD);
-    for (int v=0; v<n; ++v) {
+    for (int v = 0; v < n; ++v) {
         long double best = INF_LD;
-        for (auto &kv: DR.slot_id[v]) {
+        for (const auto &kv : dr.slot_id[v]) {
             best = min(best, dist_transformed[kv.second]);
         }
         dist_orig[v] = best;
     }
-
-    cout.setf(std::ios::fixed);
-    cout.precision(12);
-    for (int v=0; v<n; ++v) {
-        if (dist_orig[v] == INF_LD) cout << "INF\n";
-        else cout << dist_orig[v] << "\n";
-    }
-    return 0;
+    return dist_orig;
 }
