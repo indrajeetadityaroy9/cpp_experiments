@@ -5,8 +5,6 @@
 #include <random>
 
 void performance_test() {
-    std::cout << "Performance test with larger dataset:\n";
-
     customhashtable::HashTable<std::string, int> ht(1024);
 
     const int num_elements = 10000;

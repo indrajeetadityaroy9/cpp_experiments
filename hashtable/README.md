@@ -1,4 +1,4 @@
-# Hashtable Playground
+# Hashtable Experimentation
 
 Two template-based hash table implementations using separate chaining for collision resolution, each optimized for different use cases:
 
