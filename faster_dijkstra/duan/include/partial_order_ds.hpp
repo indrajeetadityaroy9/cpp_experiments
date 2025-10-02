@@ -5,11 +5,11 @@
  * Supports:
  * - Insert(key, value): O(max{1, log(N/M)}) amortized
  * - BatchPrepend(L): O(L·log(L/M)) amortized
- * - Pull(): Returns ≤M smallest keys in O(M) amortized
+ * - Pull(): Returns <=M smallest keys in O(M) amortized
  *
  * Maintains two sequences of blocks:
- * - D₀: Elements from batch prepends (no size bound)
- * - D₁: Elements from inserts (O(N/M) blocks)
+ * - D_0: Elements from batch prepends (no size bound)
+ * - D_1: Elements from inserts (O(N/M) blocks)
  */
 
 #ifndef DUAN_PARTIAL_ORDER_DS_HPP
@@ -48,11 +48,11 @@ struct Block {
  * Implementation of Lemma 3.1 from Duan et al. paper.
  *
  * Invariants:
- * - D₀ blocks are sorted by value (batch prepend only)
- * - D₁ blocks are sorted by value with BST of upper bounds
- * - Each D₁ block has Θ(M) elements (between M/4 and M after splits)
- * - Number of D₁ blocks is O(N/M)
- * - All values in earlier blocks ≤ values in later blocks
+ * - D_0 blocks are sorted by value (batch prepend only)
+ * - D_1 blocks are sorted by value with BST of upper bounds
+ * - Each D_1 block has Θ(M) elements (between M/4 and M after splits)
+ * - Number of D_1 blocks is O(N/M)
+ * - All values in earlier blocks <= values in later blocks
  */
 class PartialOrderDS {
 public:
@@ -89,13 +89,13 @@ public:
     void BatchPrepend(const vector<KeyValuePair>& L);
 
     /**
-     * Pull smallest ≤M elements from data structure
+     * Pull smallest <=M elements from data structure
      * Returns set S' of keys and separator value x
      * Time: O(M) amortized
      *
      * @return Pair of (keys vector, separator value)
      *         If DS becomes empty, separator = B
-     *         Otherwise, max(S') < separator ≤ min(remaining)
+     *         Otherwise, max(S') < separator <= min(remaining)
      */
     std::pair<vector<int>, long double> Pull();
 
@@ -150,7 +150,7 @@ private:
 
     /**
      * Split a block in D1 that exceeds size M
-     * Finds median, partitions into two blocks of size ≤⌈M/2⌉
+     * Finds median, partitions into two blocks of size <=⌈M/2⌉
      * Time: O(M) for median finding + O(log(N/M)) for BST update
      */
     void SplitBlock(std::list<Block>::iterator block_it);
@@ -178,7 +178,7 @@ private:
 
     /**
      * Find appropriate block in D1 for value
-     * Returns iterator to block with smallest upper_bound ≥ value
+     * Returns iterator to block with smallest upper_bound >= value
      * Time: O(log(N/M))
      */
     std::list<Block>::iterator FindBlockForValue(long double value);
@@ -196,7 +196,7 @@ private:
     void RemoveKeyLocation(int key);
 
     /**
-     * Collect prefix blocks from a sequence until total size ≥ M
+     * Collect prefix blocks from a sequence until total size >= M
      * Returns (collected_blocks, remaining_sequence_start)
      */
     std::pair<vector<KeyValuePair>, std::list<Block>::iterator>

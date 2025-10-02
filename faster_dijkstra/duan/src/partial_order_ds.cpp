@@ -144,7 +144,7 @@ std::pair<vector<int>, long double> PartialOrderDS::Pull() {
     S_combined.insert(S_combined.end(), S0.begin(), S0.end());
     S_combined.insert(S_combined.end(), S1.begin(), S1.end());
 
-    // If total ≤ M, return all
+    // If total <= M, return all
     if (S_combined.size() <= (size_t)M_) {
         // All elements returned
         for (const auto& [key, value] : S_combined) {
@@ -310,7 +310,7 @@ std::pair<Block, Block> PartialOrderDS::PartitionByMedian(
 }
 
 std::list<Block> PartialOrderDS::CreateBlocksFromList(vector<KeyValuePair>& L) {
-    // Recursively partition L into blocks of size ≤ M/2
+    // Recursively partition L into blocks of size <= M/2
     std::list<Block> blocks;
 
     if (L.size() <= (size_t)(M_ / 2)) {
@@ -353,7 +353,7 @@ std::list<Block> PartialOrderDS::CreateBlocksFromList(vector<KeyValuePair>& L) {
 }
 
 std::list<Block>::iterator PartialOrderDS::FindBlockForValue(long double value) {
-    // Binary search in D1_bounds_ for smallest upper_bound ≥ value
+    // Binary search in D1_bounds_ for smallest upper_bound >= value
     auto it = D1_bounds_.lower_bound(value);
 
     if (it == D1_bounds_.end()) {

@@ -5,12 +5,12 @@
  * source set S to all reachable vertices with distance < B.
  *
  * Requirements:
- * 1. |S| ≤ 2^(lt) where l is the layer parameter
+ * 1. |S| <= 2^(lt) where l is the layer parameter
  * 2. For every incomplete vertex x with d_true(x) < B,
  *    the shortest path to x visits some complete vertex y ∈ S
  *
  * Returns:
- * - b: boundary value (≤ B)
+ * - b: boundary value (<= B)
  * - U: set of complete vertices with d[v] < b
  *
  * Time: O(m·log^(2/3)(n)) total across all recursive calls
@@ -25,7 +25,7 @@
 #include "find_pivots.hpp"
 #include "base_case.hpp"
 
-namespace duan {
+namespace duan{
 
 /**
  * Result of BMSSP operation
@@ -48,7 +48,7 @@ public:
      * Execute BMSSP algorithm
      *
      * Requirements:
-     * - |S| ≤ 2^(lt) where l is the layer parameter
+     * - |S| <= 2^(lt) where l is the layer parameter
      * - For every incomplete vertex x with d_true(x) < B,
      *   the shortest path to x visits some complete vertex y ∈ S
      *
@@ -73,7 +73,7 @@ private:
      * Relax edges from a set of vertices
      *
      * For each edge (u,v) where u ∈ U_i:
-     * - If d[u] + w(u,v) ≤ d[v], update d[v]
+     * - If d[u] + w(u,v) <= d[v], update d[v]
      * - Classify relaxed vertices by distance range:
      *   - [B_i, B): insert into DS
      *   - [b_i, B_i): add to K for batch prepend

@@ -70,7 +70,7 @@ BaseCaseResult BaseCase::Execute(
             long double new_dist = labels.dist[u] + edge.weight;
 
             // Check relaxation condition (line 148 in paper)
-            // Use ≤ for relaxation (allows reusing edges)
+            // Use <= for relaxation (allows reusing edges)
             if (new_dist <= labels.dist[v] && new_dist < B) {
                 // Check if this is an improvement (distance or tie-break)
                 bool update = false;
@@ -108,7 +108,7 @@ BaseCaseResult BaseCase::Execute(
 
     // Determine boundary and result set
     if ((int)U_0.size() <= k) {
-        // Case 1: Found ≤ k vertices, return all with boundary B
+        // Case 1: Found <= k vertices, return all with boundary B
         result.b = B;
         result.U = U_0;
     } else {

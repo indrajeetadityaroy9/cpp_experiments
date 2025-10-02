@@ -140,7 +140,7 @@ void BMSSP::RelaxAndClassify(
             long double new_dist = labels.dist[u] + edge.weight;
 
             // Relaxation condition (line 209 in paper)
-            // Use ≤ to allow reusing edges from lower levels
+            // Use <= to allow reusing edges from lower levels
             if (new_dist <= labels.dist[v]) {
                 // Check if this is an improvement or tie-break
                 bool update = false;

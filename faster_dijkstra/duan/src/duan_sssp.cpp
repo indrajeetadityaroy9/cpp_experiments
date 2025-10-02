@@ -67,9 +67,9 @@ Params DuanSSSP::ComputeParams(int n) {
 }
 
 int DuanSSSP::ComputeInitialLayer(int n, const Params& params) {
-    // Initial layer l such that 2^(lt) ≥ |S| = 1
+    // Initial layer l such that 2^(lt) >= |S| = 1
     // We need l such that algorithm can handle single source
-    // In paper, top level has |S| ≤ 2^(lt) where l = O(log^(1/3) n)
+    // In paper, top level has |S| <= 2^(lt) where l = O(log^(1/3) n)
 
     // Compute log_2(n)
     if (n <= 1) return 0;
@@ -77,7 +77,7 @@ int DuanSSSP::ComputeInitialLayer(int n, const Params& params) {
     long double log_n = std::log2((long double)n);
 
     // Initial layer: l = ⌈log(n) / t⌉
-    // This ensures 2^(lt) ≥ n ≥ |S|
+    // This ensures 2^(lt) >= n >= |S|
     int l = std::max(1, (int)std::ceil(log_n / (long double)params.t));
 
     return l;

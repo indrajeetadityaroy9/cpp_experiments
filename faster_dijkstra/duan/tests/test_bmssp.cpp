@@ -142,7 +142,7 @@ void test_bounded_search() {
 
     auto result = BMSSP::Execute(g, labels, l, B, S, params);
 
-    // Should only find vertices with dist < result.b ≤ B
+    // Should only find vertices with dist < result.b <= B
     assert(result.b <= B);
     for (int v : result.U) {
         assert(labels.dist[v] < result.b);

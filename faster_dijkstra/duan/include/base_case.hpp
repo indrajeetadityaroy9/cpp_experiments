@@ -11,7 +11,7 @@
  *    the shortest path to v visits x
  *
  * Returns:
- * - b: boundary value (≤ B)
+ * - b: boundary value (<= B)
  * - U: set of vertices with d[v] < b
  *
  * Time: O(k·log(k)) using binary heap

@@ -8,10 +8,10 @@
  * 1. Relax edges from S for k steps, tracking visited vertices W
  * 2. If |W| > k|S|, return early with P = S (too many vertices)
  * 3. Otherwise, build predecessor forest F and identify pivots:
- *    - P contains roots of trees with ≥k vertices
+ *    - P contains roots of trees with >=k vertices
  *
  * Returns:
- * - P: pivot set (subset of S), size ≤ |W|/k
+ * - P: pivot set (subset of S), size <= |W|/k
  * - W: working set, size O(k|S|)
  *
  * Time: O(min{k²|S|, k|W|})
@@ -107,7 +107,7 @@ private:
         const vector<int>& roots);
 
     /**
-     * Identify pivot vertices (roots with subtree size ≥ k)
+     * Identify pivot vertices (roots with subtree size >= k)
      *
      * @param S Source set
      * @param subtree_sizes Map from vertex -> subtree size

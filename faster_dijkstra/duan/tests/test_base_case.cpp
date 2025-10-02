@@ -49,7 +49,7 @@ bool approx_equal(long double a, long double b, long double eps = 1e-9) {
     return std::abs(a - b) < eps;
 }
 
-// Test 1: Small k, few vertices found (|U| ≤ k)
+// Test 1: Small k, few vertices found (|U| <= k)
 void test_small_k_few_vertices() {
     Graph g = create_path_graph();
     Labels labels(5);
@@ -65,7 +65,7 @@ void test_small_k_few_vertices() {
     auto result = BaseCase::Execute(g, labels, B, S, k);
 
     // Should find vertices 0, 1, 2 (distances 0, 1, 2)
-    // Since |U_0| = 3 ≤ k = 10, should return b = B
+    // Since |U_0| = 3 <= k = 10, should return b = B
     assert(approx_equal(result.b, B));
     assert(result.U.size() == 3);
 
@@ -145,7 +145,7 @@ void test_bounded_by_B() {
     auto result = BaseCase::Execute(g, labels, B, S, k);
 
     // Vertices with dist < B: {0, 1}
-    // Since |U_0| = 2 ≤ k, return b = B
+    // Since |U_0| = 2 <= k, return b = B
     assert(approx_equal(result.b, B));
     assert(result.U.size() == 2);
 }
@@ -205,7 +205,7 @@ void test_isolated_source() {
     auto result = BaseCase::Execute(g, labels, B, S, k);
 
     // Only vertex 0 is reachable
-    // |U_0| = 1 ≤ k, so b = B
+    // |U_0| = 1 <= k, so b = B
     assert(approx_equal(result.b, B));
     assert(result.U.size() == 1);
     assert(result.U[0] == 0);

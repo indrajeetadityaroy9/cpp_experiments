@@ -61,7 +61,7 @@ FindPivotsResult FindPivots::Execute(
     // Compute subtree sizes
     auto subtree_sizes = ComputeSubtreeSizes(forest, S);
 
-    // Identify pivots (roots with subtree size ≥ k)
+    // Identify pivots (roots with subtree size >= k)
     result.P = IdentifyPivots(S, subtree_sizes, k);
 
     return result;
@@ -82,7 +82,7 @@ void FindPivots::RelaxLayer(
             int v = edge.to;
             long double new_dist = labels.dist[u] + edge.weight;
 
-            // IMPORTANT: Use ≤ not < (see paper line 61 and footnote)
+            // IMPORTANT: Use <= not < (see paper line 61 and footnote)
             // This allows edges relaxed in lower levels to be reused in upper levels
             if (new_dist <= labels.dist[v]) {
                 // Check if this is actually an improvement or tie-break
@@ -202,7 +202,7 @@ vector<int> FindPivots::IdentifyPivots(
     vector<int> pivots;
 
     for (int u : S) {
-        // Check if u is a root with subtree size ≥ k
+        // Check if u is a root with subtree size >= k
         auto it = subtree_sizes.find(u);
         if (it != subtree_sizes.end() && it->second >= k) {
             pivots.push_back(u);

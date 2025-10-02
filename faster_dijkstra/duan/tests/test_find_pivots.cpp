@@ -62,7 +62,7 @@ void test_single_source_no_pivots() {
     assert(result.W.size() == 5);
 
     // With k=5, all vertices reachable in <k steps from source
-    // So no subtree should have ≥k vertices, hence P should be empty or small
+    // So no subtree should have >=k vertices, hence P should be empty or small
     // Actually, the subtree rooted at 0 has 5 vertices = k, so 0 becomes a pivot
     assert(result.P.size() <= 1);
 }
@@ -85,7 +85,7 @@ void test_single_source_with_pivot() {
     // Should have visited center + all spokes = 11 vertices
     assert(result.W.size() == 11);
 
-    // Vertex 0 is root of tree with 11 vertices ≥ k=3, so should be a pivot
+    // Vertex 0 is root of tree with 11 vertices >= k=3, so should be a pivot
     assert(result.P.size() == 1);
     assert(result.P[0] == 0);
 }
@@ -164,7 +164,7 @@ void test_empty_source_set() {
     assert(result.W.empty());
 }
 
-// Test 6: Bounded relaxation (vertices with d ≥ B not added to W)
+// Test 6: Bounded relaxation (vertices with d >= B not added to W)
 void test_bounded_relaxation() {
     Graph g = create_path_graph();
     Labels labels(5);
@@ -180,7 +180,7 @@ void test_bounded_relaxation() {
     auto result = FindPivots::Execute(g, labels, B, S, k);
 
     // Vertices with dist < B: 0 (0.0), 1 (1.0), 2 (2.0)
-    // Vertex 3 (3.0) ≥ B=2.5, should not be in W
+    // Vertex 3 (3.0) >= B=2.5, should not be in W
     assert(result.W.size() <= 3);
 
     // Check all vertices in W have dist < B

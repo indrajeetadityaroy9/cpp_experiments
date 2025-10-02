@@ -101,7 +101,7 @@ void test_pull_with_limit() {
     assert(sep > 20.0);
 }
 
-// Test 6: BatchPrepend small set (L ≤ M)
+// Test 6: BatchPrepend small set (L <= M)
 void test_batch_prepend_small() {
     PartialOrderDS ds;
     ds.Initialize(10, 100.0);
