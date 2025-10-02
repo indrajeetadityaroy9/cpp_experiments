@@ -18,7 +18,7 @@ namespace duan{
 /**
  * Labels structure maintaining shortest path information
  *
- * Invariant: dist[v] ≥ d(v) for all vertices v
+ * Invariant: dist[v] >= d(v) for all vertices v
  * where d(v) is the true shortest path distance
  */
 class Labels {
