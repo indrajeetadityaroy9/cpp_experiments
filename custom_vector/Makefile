@@ -3,7 +3,7 @@ CXXFLAGS := -std=c++23 -O3 -Wall -Wextra
 
 TARGET := vector_test
 SRCS := vector_test.cpp vendor/catch_amalgamated.cpp
-DEPS := vector.cpp vendor/catch_amalgamated.hpp
+DEPS := vector.hpp vendor/catch_amalgamated.hpp
 
 .PHONY: all clean
 

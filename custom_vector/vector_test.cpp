@@ -1,7 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include "vendor/catch_amalgamated.hpp"
 #include <string>
-#include "vector.cpp"
+#include "vector.hpp"
 using customvector::vector;
 
 TEST_CASE("push_back grows capacity and stores values", "[vector]") {
@@ -9,7 +9,7 @@ TEST_CASE("push_back grows capacity and stores values", "[vector]") {
 
     SECTION("initial state") {
         REQUIRE(values.getSize() == 0);
-        REQUIRE(values.getCapacity() == 1);
+        REQUIRE(values.getCapacity() == vector<int>::kInitialCapacity);
     }
 
     values.push_back(10);
@@ -82,7 +82,7 @@ TEST_CASE("shrinkToFit and pop_back adjust size/capacity", "[vector]") {
     words.push_back("beta");
     words.push_back("gamma");
 
-    words.pop_back();
+    REQUIRE(words.pop_back().has_value());
     REQUIRE(words.getSize() == 2);
     REQUIRE(words.at(0) == "alpha");
     REQUIRE(words.at(1) == "beta");
@@ -122,7 +122,7 @@ TEST_CASE("empty() method works correctly", "[vector][cpp23]") {
     values.push_back(1);
     REQUIRE_FALSE(values.empty());
 
-    values.pop_back();
+    REQUIRE(values.pop_back().has_value());
     REQUIRE(values.empty());
 }
 
@@ -153,4 +153,82 @@ TEST_CASE("iterator support enables range-based for loops", "[vector][cpp23]") {
         }
         REQUIRE(count == 3);
     }
+}
+
+TEST_CASE("reserve preallocates storage and preserves elements", "[vector]") {
+    vector<int> values;
+    values.reserve(10);
+
+    const auto initialCapacity = values.getCapacity();
+    REQUIRE(initialCapacity >= 10);
+
+    int lvalue = 42;
+    values.push_back(lvalue);
+    values.push_back(100);
+
+    REQUIRE(values.getCapacity() == initialCapacity);
+    REQUIRE(values.getSize() == 2);
+    REQUIRE(values.at(0) == 42);
+    REQUIRE(values.at(1) == 100);
+}
+
+TEST_CASE("pop_back returns error when vector is empty", "[vector][cpp23]") {
+    vector<int> values;
+
+    auto result = values.pop_back();
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == customvector::VectorError::Empty);
+}
+
+TEST_CASE("insert adds elements at specified positions", "[vector][cpp23]") {
+    vector<int> values;
+    values.push_back(1);
+    values.push_back(3);
+
+    auto midInsert = values.insert(1, 2);
+    REQUIRE(midInsert.has_value());
+    REQUIRE(values.getSize() == 3);
+    REQUIRE(values.at(0) == 1);
+    REQUIRE(values.at(1) == 2);
+    REQUIRE(values.at(2) == 3);
+
+    auto frontInsert = values.insert(0, 0);
+    REQUIRE(frontInsert.has_value());
+    REQUIRE(values.getSize() == 4);
+    REQUIRE(values.at(0) == 0);
+    REQUIRE(values.at(1) == 1);
+
+    auto backInsert = values.insert(values.getSize(), 4);
+    REQUIRE(backInsert.has_value());
+    REQUIRE(values.getSize() == 5);
+    REQUIRE(values.at(4) == 4);
+
+    auto errorInsert = values.insert(values.getSize() + 1, 99);
+    REQUIRE_FALSE(errorInsert.has_value());
+    REQUIRE(errorInsert.error() == customvector::VectorError::IndexOutOfBounds);
+}
+
+namespace {
+    struct MoveOnly {
+        explicit MoveOnly(int v) : value(v) {}
+        MoveOnly(const MoveOnly&) = delete;
+        MoveOnly& operator=(const MoveOnly&) = delete;
+        MoveOnly(MoveOnly&&) = default;
+        MoveOnly& operator=(MoveOnly&&) = default;
+        int value;
+    };
+}
+
+TEST_CASE("emplace constructs elements in place", "[vector][emplace]") {
+    vector<MoveOnly> values;
+
+    values.emplace_back(42);
+    REQUIRE(values.getSize() == 1);
+    REQUIRE(values.at(0).value == 42);
+
+    auto result = values.emplace(0, 7);
+    REQUIRE(result.has_value());
+    REQUIRE(values.getSize() == 2);
+    REQUIRE(values.at(0).value == 7);
+    REQUIRE(values.at(1).value == 42);
 }
