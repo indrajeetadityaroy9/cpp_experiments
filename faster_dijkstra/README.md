@@ -1,6 +1,6 @@
-# Duan Deterministic SSSP Implementation
+# Single-Source Shortest Path Implementation
 
-Experimental implementation of the theoretical single-source shortest path algorithm achieving **O(m·log^(2/3)(n))** complexity presented in ([arXiv:2504.17033v2](https://arxiv.org/abs/2504.17033)).
+Experimental implementation of the theoretical single-source shortest path algorithm achieving O(m \log^{2/3}(n)) complexity presented in: **Breaking the Sorting Barrier for Directed Single-Source Shortest Paths** ([arXiv:2504.17033v2](https://arxiv.org/abs/2504.17033)).
 
 ### Notes
 - Current implementation achieves optimal O(m·log^(2/3)(n)) complexity on constant-degree graphs
