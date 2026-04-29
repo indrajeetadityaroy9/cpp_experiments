@@ -1,94 +1,102 @@
 #ifndef LRU_H
 #define LRU_H
 
+#include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <functional>
 #include <iterator>
 #include <limits>
 #include <memory>
-#include <optional>
-#include <type_traits>
+#include <new>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
+using namespace std;
 
-// Concept for hashable key types
-template<typename K>
-concept Hashable = requires(K k) {
-    { std::hash<K>{}(k) } -> std::convertible_to<std::size_t>;
+template <typename K>
+concept Hashable = requires(const K& key) {
+    { hash<K>{}(key) } -> convertible_to<size_t>;
 };
 
-// High-performance thread-unsafe LRU cache with O(1) get/set operations.
-//
-// Optimizations:
-// - Contiguous storage: All entries in a flat array for cache locality
-// - Array-based linked list: Uses indices instead of pointers
-// - Integrated slab allocator: O(1) allocation via embedded free list
-// - Robin Hood hashing: Custom hash table with bounded probe sequences
-//
-// Template parameters:
-//   K - Key type (must be Hashable and equality comparable)
-//   V - Value type
-//
-// Supports move-only value types (use get_ref() instead of get()).
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 class LRUCache {
 public:
     using key_type = K;
     using mapped_type = V;
-    using value_type = std::pair<const K&, V&>;
-    using const_value_type = std::pair<const K&, const V&>;
+    using value_type = pair<const K&, V&>;
+    using const_value_type = pair<const K&, const V&>;
 
 private:
-    // Sentinel values for index-based linking
-    static constexpr std::size_t INVALID_INDEX = std::numeric_limits<std::size_t>::max();
-    static constexpr std::size_t EMPTY_SLOT = INVALID_INDEX;
-    static constexpr std::size_t TOMBSTONE = INVALID_INDEX - 1;
+    static constexpr size_t INVALID_INDEX = numeric_limits<size_t>::max();
 
-    // Entry struct - stored contiguously in nodes_ array
-    // Combines key/value storage with LRU list linkage
+    template <typename T>
+    struct Storage {
+        alignas(T) byte bytes[sizeof(T)];
+
+        T* ptr() noexcept { return std::launder(reinterpret_cast<T*>(bytes)); }
+        const T* ptr() const noexcept { return std::launder(reinterpret_cast<const T*>(bytes)); }
+
+        template <typename... Args>
+        void construct(Args&&... args) {
+            std::construct_at(ptr(), std::forward<Args>(args)...);
+        }
+
+        void destroy() noexcept { std::destroy_at(ptr()); }
+    };
+
     struct Entry {
-        K key;
-        V value;
-        std::size_t prev;      // Index in nodes_ (LRU list linkage)
-        std::size_t next;      // Index in nodes_ (LRU list linkage)
-        std::size_t hash;      // Cached hash value (avoids rehashing)
-        bool occupied;         // True if slot contains valid data
+        Storage<K> key_storage;
+        Storage<V> value_storage;
+        size_t prev = INVALID_INDEX;
+        size_t next = INVALID_INDEX;
+        size_t hash = 0;
+        size_t bucket_index = INVALID_INDEX;
 
-        Entry() : prev(INVALID_INDEX), next(INVALID_INDEX), hash(0), occupied(false) {}
+        K& key() noexcept { return *key_storage.ptr(); }
+        const K& key() const noexcept { return *key_storage.ptr(); }
+
+        V& value() noexcept { return *value_storage.ptr(); }
+        const V& value() const noexcept { return *value_storage.ptr(); }
+
+        template <typename KArg, typename VArg>
+        void construct(KArg&& key_arg, VArg&& value_arg) {
+            key_storage.construct(std::forward<KArg>(key_arg));
+            try {
+                value_storage.construct(std::forward<VArg>(value_arg));
+            } catch (...) {
+                key_storage.destroy();
+                throw;
+            }
+        }
+
+        void destroy() noexcept {
+            value_storage.destroy();
+            key_storage.destroy();
+        }
     };
 
-    // Robin Hood hash bucket
     struct Bucket {
-        std::size_t node_index;  // Index into nodes_
-        std::size_t psl;         // Probe sequence length (for Robin Hood)
+        size_t node_index = INVALID_INDEX;
+        size_t psl = 0;
 
-        Bucket() : node_index(EMPTY_SLOT), psl(0) {}
-
-        [[nodiscard]] bool is_empty() const noexcept { return node_index == EMPTY_SLOT; }
-        [[nodiscard]] bool is_tombstone() const noexcept { return node_index == TOMBSTONE; }
-        [[nodiscard]] bool is_occupied() const noexcept { return !is_empty() && !is_tombstone(); }
+        bool is_empty() const noexcept { return node_index == INVALID_INDEX; }
     };
 
-    // Storage
-    std::unique_ptr<Entry[]> nodes_;           // Contiguous node storage
-    std::unique_ptr<Bucket[]> hash_buckets_;   // Robin Hood hash table
+    vector<Entry> nodes_;
+    vector<Bucket> hash_buckets_;
+    size_t free_head_ = INVALID_INDEX;
+    size_t lru_head_ = INVALID_INDEX;
+    size_t lru_tail_ = INVALID_INDEX;
+    size_t size_ = 0;
 
-    // Slab allocator free list head (embedded in nodes_)
-    std::size_t free_head_;
+    static constexpr size_t next_power_of_two(size_t n) noexcept {
+        if (n == 0) {
+            return 1;
+        }
 
-    // LRU list pointers (indices, not pointers)
-    std::size_t lru_head_;  // Most recently used
-    std::size_t lru_tail_;  // Least recently used
-
-    // Sizing
-    std::size_t capacity_;
-    std::size_t size_;
-    std::size_t bucket_count_;  // Power of 2 for fast modulo
-
-    // Helper: compute next power of two
-    static constexpr std::size_t next_power_of_two(std::size_t n) noexcept {
-        if (n == 0) return 1;
         --n;
         n |= n >> 1;
         n |= n >> 2;
@@ -99,41 +107,53 @@ private:
         return n + 1;
     }
 
-    // Slab allocator methods
+    static size_t hash_lookup(const K& key) { return hash<K>{}(key); }
+    static bool keys_equal(const K& stored, const K& key) { return stored == key; }
+
+    static size_t hash_lookup(string_view key) requires same_as<K, string> {
+        return hash<string_view>{}(key);
+    }
+
+    static size_t hash_lookup(const char* key) requires same_as<K, string> {
+        return hash<string_view>{}(key);
+    }
+
+    static bool keys_equal(const K& stored, string_view key) requires same_as<K, string> {
+        return stored == key;
+    }
+
+    static bool keys_equal(const K& stored, const char* key) requires same_as<K, string> {
+        return stored == key;
+    }
+
     void init_free_list();
-    [[nodiscard]] std::size_t alloc_slot();
-    void free_slot(std::size_t idx);
-
-    // Robin Hood hash table methods
-    [[nodiscard]] std::size_t compute_hash(const K& key) const noexcept;
-    [[nodiscard]] std::size_t find_bucket(const K& key) const;
-    [[nodiscard]] std::size_t find_bucket_with_hash(const K& key, std::size_t hash) const;
-    void insert_bucket(std::size_t node_idx, std::size_t hash);
-    void remove_bucket(std::size_t node_idx);
-
-    // LRU list methods (index-based)
-    void link_as_mru(std::size_t idx);
-    void unlink(std::size_t idx);
-    void move_to_mru(std::size_t idx);
+    template <typename KeyLike>
+    size_t find_bucket_with_hash(const KeyLike& key, size_t hash_value) const
+        requires requires(const K& stored, const KeyLike& lookup) {
+            { hash_lookup(lookup) } -> convertible_to<size_t>;
+            { keys_equal(stored, lookup) } -> convertible_to<bool>;
+        };
+    void insert_bucket(size_t node_index, size_t hash_value);
+    void remove_bucket(size_t node_index);
+    void link_as_mru(size_t node_index);
+    void unlink(size_t node_index);
+    void move_to_mru(size_t node_index);
     void evict_lru();
-
-    // Clear all entries
-    void clear_all();
+    void destroy_all() noexcept;
 
 public:
-    // Forward iterator for traversing cache from MRU to LRU
     class iterator {
     public:
-        using iterator_category = std::forward_iterator_tag;
-        using difference_type = std::ptrdiff_t;
-        using value_type = std::pair<const K&, V&>;
+        using iterator_category = forward_iterator_tag;
+        using difference_type = ptrdiff_t;
+        using value_type = pair<const K&, V&>;
         using pointer = value_type*;
         using reference = value_type;
 
-        iterator() : nodes_(nullptr), current_(INVALID_INDEX) {}
-        iterator(Entry* nodes, std::size_t idx) : nodes_(nodes), current_(idx) {}
+        iterator() = default;
+        iterator(Entry* nodes, size_t index) : nodes_(nodes), current_(index) {}
 
-        reference operator*() const { return {nodes_[current_].key, nodes_[current_].value}; }
+        reference operator*() const { return {nodes_[current_].key(), nodes_[current_].value()}; }
 
         iterator& operator++() {
             current_ = nodes_[current_].next;
@@ -141,34 +161,37 @@ public:
         }
 
         iterator operator++(int) {
-            iterator tmp = *this;
+            auto copy = *this;
             ++(*this);
-            return tmp;
+            return copy;
         }
 
-        bool operator==(const iterator& other) const { return current_ == other.current_; }
-        bool operator!=(const iterator& other) const { return current_ != other.current_; }
+        bool operator==(const iterator& other) const {
+            return nodes_ == other.nodes_ && current_ == other.current_;
+        }
+
+        bool operator!=(const iterator& other) const { return !(*this == other); }
 
     private:
-        Entry* nodes_;
-        std::size_t current_;
+        Entry* nodes_ = nullptr;
+        size_t current_ = INVALID_INDEX;
+
         friend class const_iterator;
     };
 
-    // Const forward iterator for traversing cache from MRU to LRU
     class const_iterator {
     public:
-        using iterator_category = std::forward_iterator_tag;
-        using difference_type = std::ptrdiff_t;
-        using value_type = std::pair<const K&, const V&>;
+        using iterator_category = forward_iterator_tag;
+        using difference_type = ptrdiff_t;
+        using value_type = pair<const K&, const V&>;
         using pointer = const value_type*;
         using reference = value_type;
 
-        const_iterator() : nodes_(nullptr), current_(INVALID_INDEX) {}
-        const_iterator(const Entry* nodes, std::size_t idx) : nodes_(nodes), current_(idx) {}
-        const_iterator(const iterator& it) : nodes_(it.nodes_), current_(it.current_) {}
+        const_iterator() = default;
+        const_iterator(const Entry* nodes, size_t index) : nodes_(nodes), current_(index) {}
+        const_iterator(const iterator& other) : nodes_(other.nodes_), current_(other.current_) {}
 
-        reference operator*() const { return {nodes_[current_].key, nodes_[current_].value}; }
+        reference operator*() const { return {nodes_[current_].key(), nodes_[current_].value()}; }
 
         const_iterator& operator++() {
             current_ = nodes_[current_].next;
@@ -176,510 +199,399 @@ public:
         }
 
         const_iterator operator++(int) {
-            const_iterator tmp = *this;
+            auto copy = *this;
             ++(*this);
-            return tmp;
+            return copy;
         }
 
-        bool operator==(const const_iterator& other) const { return current_ == other.current_; }
-        bool operator!=(const const_iterator& other) const { return current_ != other.current_; }
+        bool operator==(const const_iterator& other) const {
+            return nodes_ == other.nodes_ && current_ == other.current_;
+        }
+
+        bool operator!=(const const_iterator& other) const { return !(*this == other); }
 
     private:
-        const Entry* nodes_;
-        std::size_t current_;
+        const Entry* nodes_ = nullptr;
+        size_t current_ = INVALID_INDEX;
     };
 
-    explicit LRUCache(std::size_t item_limit);
+    explicit LRUCache(size_t item_limit);
     ~LRUCache();
-
-    // Move constructor
     LRUCache(LRUCache&& other) noexcept;
-    // Move assignment
     LRUCache& operator=(LRUCache&& other) noexcept;
-
-    // Non-copyable
     LRUCache(const LRUCache&) = delete;
     LRUCache& operator=(const LRUCache&) = delete;
 
-    // Check if key exists without updating LRU order. O(1).
-    [[nodiscard]] bool has(const K& key) const;
+    template <typename KeyLike>
+    bool has(const KeyLike& key) const
+        requires requires(const K& stored, const KeyLike& lookup) {
+            { hash_lookup(lookup) } -> convertible_to<size_t>;
+            { keys_equal(stored, lookup) } -> convertible_to<bool>;
+        };
 
-    // Get pointer to value (null if not found). O(1).
-    [[nodiscard]] V* get(const K& key);
-    [[nodiscard]] const V* get(const K& key) const;
+    template <typename KeyLike>
+    V* get(const KeyLike& key)
+        requires requires(const K& stored, const KeyLike& lookup) {
+            { hash_lookup(lookup) } -> convertible_to<size_t>;
+            { keys_equal(stored, lookup) } -> convertible_to<bool>;
+        };
 
-    // Set or update value for key. O(1).
-    // Evicts LRU entry if capacity exceeded.
+    template <typename KeyLike>
+    const V* get(const KeyLike& key) const
+        requires requires(const K& stored, const KeyLike& lookup) {
+            { hash_lookup(lookup) } -> convertible_to<size_t>;
+            { keys_equal(stored, lookup) } -> convertible_to<bool>;
+        };
+
     template <typename KType, typename VType>
     bool set(KType&& key, VType&& value);
 
+    size_t size() const noexcept { return size_; }
+    size_t capacity() const noexcept { return nodes_.size(); }
 
-    // Query current size and capacity
-    [[nodiscard]] std::size_t size() const noexcept { return size_; }
-    [[nodiscard]] std::size_t capacity() const noexcept { return capacity_; }
-
-    // Clear all entries from the cache
     void clear();
 
-    // Iterator access (MRU to LRU order)
-    // Note: Iteration does not update LRU order
     iterator begin() noexcept;
     iterator end() noexcept;
-    [[nodiscard]] const_iterator begin() const noexcept;
-    [[nodiscard]] const_iterator end() const noexcept;
-    [[nodiscard]] const_iterator cbegin() const noexcept;
-    [[nodiscard]] const_iterator cend() const noexcept;
+    const_iterator begin() const noexcept;
+    const_iterator end() const noexcept;
+    const_iterator cbegin() const noexcept;
+    const_iterator cend() const noexcept;
 };
 
-
-
-#endif
-
-// ============================================================================
-// Constructor / Destructor
-// ============================================================================
-
-template<Hashable K, typename V>
-LRUCache<K, V>::LRUCache(std::size_t item_limit)
-    : free_head_(0),
-      lru_head_(INVALID_INDEX),
-      lru_tail_(INVALID_INDEX),
-      capacity_(item_limit),
-      size_(0),
-      bucket_count_(0) {
-
-    if (capacity_ == 0) {
-        // Handle zero capacity - no allocations needed
+template <Hashable K, typename V>
+LRUCache<K, V>::LRUCache(size_t item_limit) : nodes_(item_limit) {
+    if (nodes_.empty()) {
         return;
     }
 
-    // Allocate contiguous storage for entries
-    nodes_ = std::make_unique<Entry[]>(capacity_);
+    auto bucket_count = next_power_of_two((item_limit * 10) / 7);
+    if (bucket_count < 4) {
+        bucket_count = 4;
+    }
 
-    // Compute bucket count: load factor ~0.7, power of 2 for fast modulo
-    bucket_count_ = next_power_of_two((capacity_ * 10) / 7);
-    if (bucket_count_ < 4) bucket_count_ = 4;  // Minimum bucket count
-
-    // Allocate hash buckets
-    hash_buckets_ = std::make_unique<Bucket[]>(bucket_count_);
-
-    // Initialize free list
+    hash_buckets_.resize(bucket_count);
     init_free_list();
 }
 
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 LRUCache<K, V>::~LRUCache() {
-    clear_all();
+    destroy_all();
 }
 
-// ============================================================================
-// Move Semantics
-// ============================================================================
-
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 LRUCache<K, V>::LRUCache(LRUCache&& other) noexcept
     : nodes_(std::move(other.nodes_)),
       hash_buckets_(std::move(other.hash_buckets_)),
       free_head_(other.free_head_),
       lru_head_(other.lru_head_),
       lru_tail_(other.lru_tail_),
-      capacity_(other.capacity_),
-      size_(other.size_),
-      bucket_count_(other.bucket_count_) {
-
-    // Leave other in valid empty state
-    other.capacity_ = 0;
-    other.size_ = 0;
-    other.bucket_count_ = 0;
+      size_(other.size_) {
     other.free_head_ = INVALID_INDEX;
     other.lru_head_ = INVALID_INDEX;
     other.lru_tail_ = INVALID_INDEX;
+    other.size_ = 0;
 }
 
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 LRUCache<K, V>& LRUCache<K, V>::operator=(LRUCache&& other) noexcept {
-    if (this != &other) {
-        // Clean up current state
-        clear_all();
-
-        // Move from other
-        nodes_ = std::move(other.nodes_);
-        hash_buckets_ = std::move(other.hash_buckets_);
-        free_head_ = other.free_head_;
-        lru_head_ = other.lru_head_;
-        lru_tail_ = other.lru_tail_;
-        capacity_ = other.capacity_;
-        size_ = other.size_;
-        bucket_count_ = other.bucket_count_;
-
-        // Leave other in valid empty state
-        other.capacity_ = 0;
-        other.size_ = 0;
-        other.bucket_count_ = 0;
-        other.free_head_ = INVALID_INDEX;
-        other.lru_head_ = INVALID_INDEX;
-        other.lru_tail_ = INVALID_INDEX;
+    if (this == &other) {
+        return *this;
     }
+
+    destroy_all();
+    nodes_ = std::move(other.nodes_);
+    hash_buckets_ = std::move(other.hash_buckets_);
+    free_head_ = other.free_head_;
+    lru_head_ = other.lru_head_;
+    lru_tail_ = other.lru_tail_;
+    size_ = other.size_;
+
+    other.free_head_ = INVALID_INDEX;
+    other.lru_head_ = INVALID_INDEX;
+    other.lru_tail_ = INVALID_INDEX;
+    other.size_ = 0;
     return *this;
 }
 
-// ============================================================================
-// Slab Allocator Methods
-// ============================================================================
-
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 void LRUCache<K, V>::init_free_list() {
-    for (std::size_t i = 0; i < capacity_; ++i) {
-        nodes_[i].next = (i + 1 < capacity_) ? i + 1 : INVALID_INDEX;
-        nodes_[i].occupied = false;
+    for (size_t i = 0; i < nodes_.size(); ++i) {
+        auto& node = nodes_[i];
+        node.prev = INVALID_INDEX;
+        node.next = i + 1 < nodes_.size() ? i + 1 : INVALID_INDEX;
+        node.bucket_index = INVALID_INDEX;
     }
-    free_head_ = 0;
+    free_head_ = nodes_.empty() ? INVALID_INDEX : 0;
 }
 
-template<Hashable K, typename V>
-std::size_t LRUCache<K, V>::alloc_slot() {
-    std::size_t slot = free_head_;
-    free_head_ = nodes_[slot].next;
-    nodes_[slot].occupied = true;
-    return slot;
-}
-
-template<Hashable K, typename V>
-void LRUCache<K, V>::free_slot(std::size_t idx) {
-    // Destroy non-trivial types
-    if constexpr (!std::is_trivially_destructible_v<K>) {
-        nodes_[idx].key.~K();
+template <Hashable K, typename V>
+void LRUCache<K, V>::destroy_all() noexcept {
+    for (auto node_index = lru_head_; node_index != INVALID_INDEX;) {
+        auto& node = nodes_[node_index];
+        const auto next_index = node.next;
+        node.destroy();
+        node_index = next_index;
     }
-    if constexpr (!std::is_trivially_destructible_v<V>) {
-        nodes_[idx].value.~V();
+}
+
+template <Hashable K, typename V>
+template <typename KeyLike>
+size_t LRUCache<K, V>::find_bucket_with_hash(const KeyLike& key, size_t hash_value) const
+    requires requires(const K& stored, const KeyLike& lookup) {
+        { hash_lookup(lookup) } -> convertible_to<size_t>;
+        { keys_equal(stored, lookup) } -> convertible_to<bool>;
+    } {
+    if (hash_buckets_.empty()) {
+        return INVALID_INDEX;
     }
 
-    nodes_[idx].occupied = false;
-    nodes_[idx].next = free_head_;
-    free_head_ = idx;
-}
+    const auto mask = hash_buckets_.size() - 1;
+    const auto ideal = hash_value & mask;
 
-// ============================================================================
-// Robin Hood Hash Table Methods
-// ============================================================================
+    for (size_t psl = 0; psl < hash_buckets_.size(); ++psl) {
+        const auto index = (ideal + psl) & mask;
+        const auto& bucket = hash_buckets_[index];
 
-template<Hashable K, typename V>
-std::size_t LRUCache<K, V>::compute_hash(const K& key) const noexcept {
-    return std::hash<K>{}(key);
-}
-
-template<Hashable K, typename V>
-std::size_t LRUCache<K, V>::find_bucket(const K& key) const {
-    return find_bucket_with_hash(key, compute_hash(key));
-}
-
-template<Hashable K, typename V>
-std::size_t LRUCache<K, V>::find_bucket_with_hash(const K& key, std::size_t hash) const {
-    if (bucket_count_ == 0) return INVALID_INDEX;
-
-    std::size_t ideal = hash & (bucket_count_ - 1);
-    std::size_t psl = 0;
-
-    while (true) {
-        std::size_t idx = (ideal + psl) & (bucket_count_ - 1);
-        const Bucket& b = hash_buckets_[idx];
-
-        if (b.is_empty()) {
-            return INVALID_INDEX;  // Not found
-        }
-
-        if (b.is_occupied()) {
-            // Robin Hood property: if we've probed farther than this bucket's PSL,
-            // the key would have been placed here if it existed
-            if (b.psl < psl) {
-                return INVALID_INDEX;
-            }
-
-            // Check if this is our key
-            if (nodes_[b.node_index].hash == hash && nodes_[b.node_index].key == key) {
-                return idx;  // Found
-            }
-        }
-
-        ++psl;
-
-        // Safety: prevent infinite loop (shouldn't happen with proper load factor)
-        if (psl > bucket_count_) {
+        if (bucket.is_empty() || bucket.psl < psl) {
             return INVALID_INDEX;
         }
+
+        const auto& node = nodes_[bucket.node_index];
+        if (node.hash == hash_value && keys_equal(node.key(), key)) {
+            return index;
+        }
     }
+
+    return INVALID_INDEX;
 }
 
-template<Hashable K, typename V>
-void LRUCache<K, V>::insert_bucket(std::size_t node_idx, std::size_t hash) {
-    std::size_t ideal = hash & (bucket_count_ - 1);
-    std::size_t psl = 0;
-    std::size_t inserting_idx = node_idx;
-    std::size_t inserting_psl = 0;
+template <Hashable K, typename V>
+void LRUCache<K, V>::insert_bucket(size_t node_index, size_t hash_value) {
+    const auto mask = hash_buckets_.size() - 1;
+    const auto ideal = hash_value & mask;
+    Bucket pending{node_index, 0};
 
-    while (true) {
-        std::size_t idx = (ideal + psl) & (bucket_count_ - 1);
-        Bucket& b = hash_buckets_[idx];
+    for (size_t psl = 0;; ++psl, ++pending.psl) {
+        const auto index = (ideal + psl) & mask;
+        auto& bucket = hash_buckets_[index];
 
-        if (b.is_empty() || b.is_tombstone()) {
-            b.node_index = inserting_idx;
-            b.psl = inserting_psl;
+        if (bucket.is_empty()) {
+            bucket = pending;
+            nodes_[bucket.node_index].bucket_index = index;
             return;
         }
 
-        // Robin Hood: steal from the rich (swap if current has shorter probe sequence)
-        if (b.psl < inserting_psl) {
-            std::swap(b.node_index, inserting_idx);
-            std::swap(b.psl, inserting_psl);
+        if (bucket.psl < pending.psl) {
+            swap(bucket, pending);
+            nodes_[bucket.node_index].bucket_index = index;
         }
-
-        ++psl;
-        ++inserting_psl;
     }
 }
 
-template<Hashable K, typename V>
-void LRUCache<K, V>::remove_bucket(std::size_t node_idx) {
-    // Find the bucket containing this node
-    std::size_t hash = nodes_[node_idx].hash;
-    std::size_t ideal = hash & (bucket_count_ - 1);
-    std::size_t psl = 0;
+template <Hashable K, typename V>
+void LRUCache<K, V>::remove_bucket(size_t node_index) {
+    if (hash_buckets_.empty()) {
+        return;
+    }
 
+    const auto mask = hash_buckets_.size() - 1;
+    auto empty_index = nodes_[node_index].bucket_index;
+    if (empty_index == INVALID_INDEX) {
+        return;
+    }
+
+    nodes_[node_index].bucket_index = INVALID_INDEX;
     while (true) {
-        std::size_t idx = (ideal + psl) & (bucket_count_ - 1);
-        Bucket& b = hash_buckets_[idx];
-
-        if (b.is_empty()) {
-            return;  // Not found (shouldn't happen)
+        const auto next_index = (empty_index + 1) & mask;
+        auto& next_bucket = hash_buckets_[next_index];
+        if (next_bucket.is_empty() || next_bucket.psl == 0) {
+            hash_buckets_[empty_index] = {};
+            return;
         }
 
-        if (b.is_occupied() && b.node_index == node_idx) {
-            // Found - use backward shift deletion instead of tombstone
-            // This maintains Robin Hood properties better
-            std::size_t empty_idx = idx;
-
-            while (true) {
-                std::size_t next_idx = (empty_idx + 1) & (bucket_count_ - 1);
-                Bucket& next_b = hash_buckets_[next_idx];
-
-                // Stop if next bucket is empty or has PSL of 0 (at ideal position)
-                if (next_b.is_empty() || next_b.is_tombstone() || next_b.psl == 0) {
-                    hash_buckets_[empty_idx] = Bucket{};  // Mark as empty
-                    return;
-                }
-
-                // Shift this bucket back
-                hash_buckets_[empty_idx] = next_b;
-                hash_buckets_[empty_idx].psl--;
-                empty_idx = next_idx;
-            }
-        }
-
-        ++psl;
-        if (psl > bucket_count_) return;  // Safety
+        hash_buckets_[empty_index] = next_bucket;
+        --hash_buckets_[empty_index].psl;
+        nodes_[hash_buckets_[empty_index].node_index].bucket_index = empty_index;
+        empty_index = next_index;
     }
 }
 
-// ============================================================================
-// LRU List Methods (Index-Based)
-// ============================================================================
-
-template<Hashable K, typename V>
-void LRUCache<K, V>::link_as_mru(std::size_t idx) {
-    Entry& e = nodes_[idx];
-    e.prev = INVALID_INDEX;
-    e.next = lru_head_;
+template <Hashable K, typename V>
+void LRUCache<K, V>::link_as_mru(size_t node_index) {
+    auto& node = nodes_[node_index];
+    node.prev = INVALID_INDEX;
+    node.next = lru_head_;
 
     if (lru_head_ != INVALID_INDEX) {
-        nodes_[lru_head_].prev = idx;
-    }
-    lru_head_ = idx;
-
-    if (lru_tail_ == INVALID_INDEX) {
-        lru_tail_ = idx;
-    }
-}
-
-template<Hashable K, typename V>
-void LRUCache<K, V>::unlink(std::size_t idx) {
-    Entry& e = nodes_[idx];
-
-    if (e.prev != INVALID_INDEX) {
-        nodes_[e.prev].next = e.next;
+        nodes_[lru_head_].prev = node_index;
     } else {
-        lru_head_ = e.next;
+        lru_tail_ = node_index;
     }
 
-    if (e.next != INVALID_INDEX) {
-        nodes_[e.next].prev = e.prev;
+    lru_head_ = node_index;
+}
+
+template <Hashable K, typename V>
+void LRUCache<K, V>::unlink(size_t node_index) {
+    const auto& node = nodes_[node_index];
+
+    if (node.prev != INVALID_INDEX) {
+        nodes_[node.prev].next = node.next;
     } else {
-        lru_tail_ = e.prev;
+        lru_head_ = node.next;
+    }
+
+    if (node.next != INVALID_INDEX) {
+        nodes_[node.next].prev = node.prev;
+    } else {
+        lru_tail_ = node.prev;
     }
 }
 
-template<Hashable K, typename V>
-void LRUCache<K, V>::move_to_mru(std::size_t idx) {
-    if (idx == lru_head_) return;  // Already MRU
-    unlink(idx);
-    link_as_mru(idx);
+template <Hashable K, typename V>
+void LRUCache<K, V>::move_to_mru(size_t node_index) {
+    if (node_index == lru_head_) {
+        return;
+    }
+
+    unlink(node_index);
+    link_as_mru(node_index);
 }
 
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 void LRUCache<K, V>::evict_lru() {
-    std::size_t victim = lru_tail_;
+    const auto victim = lru_tail_;
     unlink(victim);
     remove_bucket(victim);
-    free_slot(victim);
+
+    auto& node = nodes_[victim];
+    node.destroy();
+    node.prev = INVALID_INDEX;
+    node.next = free_head_;
+    free_head_ = victim;
     --size_;
 }
 
-// ============================================================================
-// Clear Methods
-// ============================================================================
-
-template<Hashable K, typename V>
-void LRUCache<K, V>::clear_all() {
-    if (!nodes_) return;
-
-    // Destroy all occupied entries
-    for (std::size_t i = 0; i < capacity_; ++i) {
-        if (nodes_[i].occupied) {
-            if constexpr (!std::is_trivially_destructible_v<K>) {
-                nodes_[i].key.~K();
-            }
-            if constexpr (!std::is_trivially_destructible_v<V>) {
-                nodes_[i].value.~V();
-            }
-            nodes_[i].occupied = false;
-        }
-    }
-
+template <Hashable K, typename V>
+void LRUCache<K, V>::clear() {
+    destroy_all();
     size_ = 0;
     lru_head_ = INVALID_INDEX;
     lru_tail_ = INVALID_INDEX;
+    fill(hash_buckets_.begin(), hash_buckets_.end(), Bucket{});
+    init_free_list();
 }
 
-template<Hashable K, typename V>
-void LRUCache<K, V>::clear() {
-    clear_all();
-
-    // Reset hash buckets
-    if (hash_buckets_) {
-        for (std::size_t i = 0; i < bucket_count_; ++i) {
-            hash_buckets_[i] = Bucket{};
-        }
-    }
-
-    // Re-initialize free list
-    if (nodes_ && capacity_ > 0) {
-        init_free_list();
-    }
+template <Hashable K, typename V>
+template <typename KeyLike>
+bool LRUCache<K, V>::has(const KeyLike& key) const
+    requires requires(const K& stored, const KeyLike& lookup) {
+        { hash_lookup(lookup) } -> convertible_to<size_t>;
+        { keys_equal(stored, lookup) } -> convertible_to<bool>;
+    } {
+    return find_bucket_with_hash(key, hash_lookup(key)) != INVALID_INDEX;
 }
 
-// ============================================================================
-// Public API: has()
-// ============================================================================
-
-template<Hashable K, typename V>
-bool LRUCache<K, V>::has(const K& key) const {
-    return find_bucket(key) != INVALID_INDEX;
-}
-
-// ============================================================================
-// Public API: get()
-// ============================================================================
-
-template<Hashable K, typename V>
-V* LRUCache<K, V>::get(const K& key) {
-    std::size_t bucket_idx = find_bucket(key);
-    if (bucket_idx == INVALID_INDEX) {
+template <Hashable K, typename V>
+template <typename KeyLike>
+V* LRUCache<K, V>::get(const KeyLike& key)
+    requires requires(const K& stored, const KeyLike& lookup) {
+        { hash_lookup(lookup) } -> convertible_to<size_t>;
+        { keys_equal(stored, lookup) } -> convertible_to<bool>;
+    } {
+    const auto bucket_index = find_bucket_with_hash(key, hash_lookup(key));
+    if (bucket_index == INVALID_INDEX) {
         return nullptr;
     }
 
-    std::size_t node_idx = hash_buckets_[bucket_idx].node_index;
-    move_to_mru(node_idx);
-    return &nodes_[node_idx].value;
+    const auto node_index = hash_buckets_[bucket_index].node_index;
+    move_to_mru(node_index);
+    return &nodes_[node_index].value();
 }
 
-template<Hashable K, typename V>
-const V* LRUCache<K, V>::get(const K& key) const {
-    std::size_t bucket_idx = find_bucket(key);
-    if (bucket_idx == INVALID_INDEX) {
+template <Hashable K, typename V>
+template <typename KeyLike>
+const V* LRUCache<K, V>::get(const KeyLike& key) const
+    requires requires(const K& stored, const KeyLike& lookup) {
+        { hash_lookup(lookup) } -> convertible_to<size_t>;
+        { keys_equal(stored, lookup) } -> convertible_to<bool>;
+    } {
+    const auto bucket_index = find_bucket_with_hash(key, hash_lookup(key));
+    if (bucket_index == INVALID_INDEX) {
         return nullptr;
     }
 
-    std::size_t node_idx = hash_buckets_[bucket_idx].node_index;
-    return &nodes_[node_idx].value;
+    return &nodes_[hash_buckets_[bucket_index].node_index].value();
 }
 
-// ============================================================================
-// Public API: set()
-// ============================================================================
-
-
-template<Hashable K, typename V>
-template<typename KType, typename VType>
+template <Hashable K, typename V>
+template <typename KType, typename VType>
 bool LRUCache<K, V>::set(KType&& key, VType&& value) {
-    if (capacity_ == 0) [[unlikely]] {
+    if (nodes_.empty()) [[unlikely]] {
         return false;
     }
 
-    std::size_t hash = compute_hash(key);
-    std::size_t bucket_idx = find_bucket_with_hash(key, hash);
-
-    if (bucket_idx != INVALID_INDEX) {
-        std::size_t node_idx = hash_buckets_[bucket_idx].node_index;
-        nodes_[node_idx].value = std::forward<VType>(value);
-        move_to_mru(node_idx);
+    const auto hash_value = hash<K>{}(key);
+    const auto bucket_index = find_bucket_with_hash(key, hash_value);
+    if (bucket_index != INVALID_INDEX) {
+        auto& node = nodes_[hash_buckets_[bucket_index].node_index];
+        node.value() = std::forward<VType>(value);
+        move_to_mru(hash_buckets_[bucket_index].node_index);
         return true;
     }
 
-    if (size_ >= capacity_) {
+    if (size_ == nodes_.size()) {
         evict_lru();
     }
 
-    std::size_t slot = alloc_slot();
-    new (&nodes_[slot].key) K(std::forward<KType>(key));
-    new (&nodes_[slot].value) V(std::forward<VType>(value));
-    nodes_[slot].hash = hash;
+    const auto slot = free_head_;
+    auto& node = nodes_[slot];
+    free_head_ = node.next;
 
-    insert_bucket(slot, hash);
+    try {
+        node.construct(std::forward<KType>(key), std::forward<VType>(value));
+    } catch (...) {
+        node.next = free_head_;
+        free_head_ = slot;
+        throw;
+    }
+    node.hash = hash_value;
+
+    insert_bucket(slot, hash_value);
     link_as_mru(slot);
     ++size_;
-
     return true;
 }
 
-// ============================================================================
-// Iterator Methods
-// ============================================================================
-
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 typename LRUCache<K, V>::iterator LRUCache<K, V>::begin() noexcept {
-    return iterator(nodes_.get(), lru_head_);
+    return iterator(nodes_.data(), lru_head_);
 }
 
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 typename LRUCache<K, V>::iterator LRUCache<K, V>::end() noexcept {
-    return iterator(nodes_.get(), INVALID_INDEX);
+    return iterator(nodes_.data(), INVALID_INDEX);
 }
 
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 typename LRUCache<K, V>::const_iterator LRUCache<K, V>::begin() const noexcept {
-    return const_iterator(nodes_.get(), lru_head_);
+    return const_iterator(nodes_.data(), lru_head_);
 }
 
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 typename LRUCache<K, V>::const_iterator LRUCache<K, V>::end() const noexcept {
-    return const_iterator(nodes_.get(), INVALID_INDEX);
+    return const_iterator(nodes_.data(), INVALID_INDEX);
 }
 
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 typename LRUCache<K, V>::const_iterator LRUCache<K, V>::cbegin() const noexcept {
     return begin();
 }
 
-template<Hashable K, typename V>
+template <Hashable K, typename V>
 typename LRUCache<K, V>::const_iterator LRUCache<K, V>::cend() const noexcept {
     return end();
 }
+
+#endif
