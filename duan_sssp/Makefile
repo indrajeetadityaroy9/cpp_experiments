@@ -9,15 +9,10 @@ CXXFLAGS = $(CXXFLAGS_BASE)
 # Directories
 INCLUDE_DIR = include
 SRC_DIR = src
-ALGO_SRC_DIR = $(SRC_DIR)/algorithms
 TEST_DIR = tests
 
 # Source files
-ALGO_SRCS = $(ALGO_SRC_DIR)/partial_order_ds.cpp \
-            $(ALGO_SRC_DIR)/find_pivots.cpp \
-            $(ALGO_SRC_DIR)/base_case.cpp \
-            $(ALGO_SRC_DIR)/bmssp.cpp
-SRCS = $(ALGO_SRCS) $(SRC_DIR)/duan_sssp.cpp
+SRCS = $(SRC_DIR)/duan_sssp.cpp
 
 # Object files
 OBJS = $(SRCS:.cpp=.o)
@@ -35,22 +30,19 @@ all: $(TEST_PARTIAL_ORDER) $(TEST_FIND_PIVOTS) $(TEST_BASE_CASE) $(TEST_BMSSP) $
 $(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(ALGO_SRC_DIR)/%.o: $(ALGO_SRC_DIR)/%.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
 # Test for PartialOrderDS
-$(TEST_PARTIAL_ORDER): $(TEST_DIR)/test_partial_order_ds.cpp $(ALGO_SRC_DIR)/partial_order_ds.cpp
+$(TEST_PARTIAL_ORDER): $(TEST_DIR)/test_partial_order_ds.cpp $(SRCS)
 	$(CXX) $(CXXFLAGS) $(CATCH2_INC) -o $@ $^ $(CATCH2_CPP)
 
 # Test for FindPivots
-$(TEST_FIND_PIVOTS): $(TEST_DIR)/test_find_pivots.cpp $(ALGO_SRC_DIR)/find_pivots.cpp
+$(TEST_FIND_PIVOTS): $(TEST_DIR)/test_find_pivots.cpp $(SRCS)
 	$(CXX) $(CXXFLAGS) $(CATCH2_INC) -o $@ $^ $(CATCH2_CPP)
 
 # Test for BaseCase
-$(TEST_BASE_CASE): $(TEST_DIR)/test_base_case.cpp $(ALGO_SRC_DIR)/base_case.cpp
+$(TEST_BASE_CASE): $(TEST_DIR)/test_base_case.cpp $(SRCS)
 	$(CXX) $(CXXFLAGS) $(CATCH2_INC) -o $@ $^ $(CATCH2_CPP)
 
-# Test for BMSSP (depends on all source files)
+# Test for BMSSP
 $(TEST_BMSSP): $(TEST_DIR)/test_bmssp.cpp $(SRCS)
 	$(CXX) $(CXXFLAGS) $(CATCH2_INC) -o $@ $^ $(CATCH2_CPP)
 
@@ -81,7 +73,7 @@ benchmark: complexity
 
 clean:
 	rm -f $(OBJS) $(TEST_PARTIAL_ORDER) $(TEST_FIND_PIVOTS) $(TEST_BASE_CASE) $(TEST_BMSSP) $(TEST_COMPLEXITY)
-	rm -f $(SRC_DIR)/*.o $(ALGO_SRC_DIR)/*.o
+	rm -f $(SRC_DIR)/*.o
 	rm -f complexity_data.csv *.d
 
 .PHONY: all test complexity benchmark clean

@@ -8,8 +8,8 @@
  */
 
 #include "../include/duan_sssp.hpp"
-#include "../test_helpers/graph_generators.hpp"
-#include "../test_helpers/test_utils.hpp"
+#include "graph_generators.hpp"
+
 #include <catch_amalgamated.hpp>
 #include <cmath>
 #include <fstream>
@@ -24,8 +24,8 @@ TEST_CASE("Correctness on path graph", "[complexity][correctness]") {
     Graph g = create_path_graph(n);
     int source = 0;
 
-    auto duan_result = DuanSSSP::ComputeSSSP(g, source, false);
-    auto dijkstra_result = Dijkstra::ComputeSSSP(g, source);
+    auto duan_result = compute_sssp(g, source, false);
+    auto dijkstra_result = compute_dijkstra_sssp(g, source);
 
     for (int i = 0; i < n; ++i) {
         REQUIRE(approx_equal(duan_result.dist[i], dijkstra_result[i]));
@@ -36,8 +36,8 @@ TEST_CASE("Correctness on grid graph", "[complexity][correctness]") {
     Graph g = create_grid_graph(5, 5);
     int source = 0;
 
-    auto duan_result = DuanSSSP::ComputeSSSP(g, source, false);
-    auto dijkstra_result = Dijkstra::ComputeSSSP(g, source);
+    auto duan_result = compute_sssp(g, source, false);
+    auto dijkstra_result = compute_dijkstra_sssp(g, source);
 
     for (int i = 0; i < (int)g.size(); ++i) {
         REQUIRE(approx_equal(duan_result.dist[i], dijkstra_result[i]));
@@ -52,8 +52,8 @@ TEST_CASE("Correctness on sparse random graph", "[complexity][correctness]") {
     Graph g = create_sparse_graph(n, out_degree, rng);
     int source = 0;
 
-    auto duan_result = DuanSSSP::ComputeSSSP(g, source, false);
-    auto dijkstra_result = Dijkstra::ComputeSSSP(g, source);
+    auto duan_result = compute_sssp(g, source, false);
+    auto dijkstra_result = compute_dijkstra_sssp(g, source);
 
     for (int i = 0; i < n; ++i) {
         REQUIRE(approx_equal(duan_result.dist[i], dijkstra_result[i]));
@@ -74,7 +74,7 @@ TEST_CASE("Complexity scaling on path graphs", "[complexity][benchmark]") {
         Graph g = create_path_graph(n);
         int m = n - 1;
 
-        auto result = DuanSSSP::ComputeSSSP(g, 0, true);
+        auto result = compute_sssp(g, 0, true);
 
         std::cout << std::setw(10) << n
                   << std::setw(15) << m
@@ -104,7 +104,7 @@ TEST_CASE("Complexity scaling on sparse graphs", "[complexity][benchmark]") {
         int m = 0;
         for (const auto& adj : g) m += adj.size();
 
-        auto result = DuanSSSP::ComputeSSSP(g, 0, true);
+        auto result = compute_sssp(g, 0, true);
 
         long double log_n = std::log2((long double)n);
         long double theoretical = m * std::pow(log_n, 2.0L / 3.0L);
@@ -123,12 +123,12 @@ TEST_CASE("Detailed statistics example", "[complexity][benchmark]") {
     std::cout << "\n=== Detailed Statistics Example ===\n";
 
     Graph g = create_grid_graph(10, 10);
-    auto result = DuanSSSP::ComputeSSSP(g, 0, true);
+    auto result = compute_sssp(g, 0, true);
 
     result.stats.print();
 
     // Verify correctness
-    auto dijkstra_result = Dijkstra::ComputeSSSP(g, 0);
+    auto dijkstra_result = compute_dijkstra_sssp(g, 0);
     bool correct = true;
     for (int i = 0; i < (int)g.size(); ++i) {
         if (!approx_equal(result.dist[i], dijkstra_result[i])) {

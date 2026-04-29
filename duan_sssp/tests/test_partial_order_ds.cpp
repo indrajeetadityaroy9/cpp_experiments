@@ -2,7 +2,7 @@
  * Unit tests for PartialOrderDS
  */
 
-#include "../include/algorithms/partial_order_ds.hpp"
+#include "../include/duan_sssp.hpp"
 #include <catch_amalgamated.hpp>
 #include <algorithm>
 

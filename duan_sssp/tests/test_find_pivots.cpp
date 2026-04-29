@@ -2,8 +2,8 @@
  * Unit tests for FindPivots algorithm
  */
 
-#include "../include/algorithms/find_pivots.hpp"
-#include "../test_helpers/graph_generators.hpp"
+#include "../include/duan_sssp.hpp"
+#include "graph_generators.hpp"
 #include <catch_amalgamated.hpp>
 #include <algorithm>
 
@@ -21,7 +21,7 @@ TEST_CASE("FindPivots single source no pivots", "[find_pivots]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = FindPivots::Execute(g, labels, B, S, k);
+    auto result = execute_find_pivots(g, labels, B, S, k);
 
     // Should have visited all 5 vertices
     REQUIRE(result.W.size() == 5);
@@ -39,7 +39,7 @@ TEST_CASE("FindPivots single source with pivot", "[find_pivots]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = FindPivots::Execute(g, labels, B, S, k);
+    auto result = execute_find_pivots(g, labels, B, S, k);
 
     REQUIRE(result.W.size() == 11);
     REQUIRE(result.P.size() == 1);
@@ -57,7 +57,7 @@ TEST_CASE("FindPivots early exit when |W| > k|S|", "[find_pivots]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = FindPivots::Execute(g, labels, B, S, k);
+    auto result = execute_find_pivots(g, labels, B, S, k);
 
     REQUIRE(result.P.size() == 1);
     REQUIRE(result.P[0] == 0);
@@ -84,7 +84,7 @@ TEST_CASE("FindPivots multiple sources", "[find_pivots]") {
     long double B = 10.0;
     vector<int> S = {0, 1};
 
-    auto result = FindPivots::Execute(g, labels, B, S, k);
+    auto result = execute_find_pivots(g, labels, B, S, k);
 
     REQUIRE(result.W.size() > 2);
 
@@ -101,7 +101,7 @@ TEST_CASE("FindPivots empty source set", "[find_pivots]") {
     long double B = 10.0;
     vector<int> S = {};
 
-    auto result = FindPivots::Execute(g, labels, B, S, k);
+    auto result = execute_find_pivots(g, labels, B, S, k);
 
     REQUIRE(result.P.empty());
     REQUIRE(result.W.empty());
@@ -118,7 +118,7 @@ TEST_CASE("FindPivots bounded relaxation", "[find_pivots]") {
     long double B = 2.5;
     vector<int> S = {0};
 
-    auto result = FindPivots::Execute(g, labels, B, S, k);
+    auto result = execute_find_pivots(g, labels, B, S, k);
 
     REQUIRE(result.W.size() <= 3);
 
@@ -143,7 +143,7 @@ TEST_CASE("FindPivots lexicographic tie-breaking", "[find_pivots]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = FindPivots::Execute(g, labels, B, S, k);
+    auto result = execute_find_pivots(g, labels, B, S, k);
 
     REQUIRE(result.W.size() == 4);
     REQUIRE(labels.pred[3] == 1);
@@ -160,7 +160,7 @@ TEST_CASE("FindPivots k-step limitation", "[find_pivots]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = FindPivots::Execute(g, labels, B, S, k);
+    auto result = execute_find_pivots(g, labels, B, S, k);
 
     REQUIRE(result.W.size() <= 3);
 }
@@ -178,7 +178,7 @@ TEST_CASE("FindPivots disconnected source", "[find_pivots]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = FindPivots::Execute(g, labels, B, S, k);
+    auto result = execute_find_pivots(g, labels, B, S, k);
 
     REQUIRE(result.W.size() == 1);
     REQUIRE(result.W[0] == 0);

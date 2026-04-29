@@ -1,7 +1,6 @@
 #include <concepts>
 #include <cstddef>
 #include <cstring>
-#include <expected>
 #include <new>
 #include <stdexcept>
 #include <type_traits>
@@ -10,15 +9,8 @@
 namespace customvector {
     using std::copy_constructible;
     using std::destructible;
-    using std::expected;
     using std::out_of_range;
     using std::size_t;
-    using std::unexpected;
-
-    enum class VectorError {
-        IndexOutOfBounds,
-        Empty
-    };
 
     template <typename Element>
         requires destructible<Element>
@@ -39,7 +31,7 @@ namespace customvector {
                     ++size_;
                 }
             } catch (...) {
-                destroy_elements(0, size_);
+                destroy_range(data_, size_);
                 ::operator delete(data_);
                 throw;
             }
@@ -96,40 +88,45 @@ namespace customvector {
             ++size_;
         }
 
-        expected<void, VectorError> insert(size_t index, const Element& element) {
-            return emplace_impl(index, element);
+        void insert(size_t index, const Element& element) {
+            emplace(index, element);
         }
 
-        expected<void, VectorError> insert(size_t index, Element&& element) {
-            return emplace_impl(index, std::move(element));
+        void insert(size_t index, Element&& element) {
+            emplace(index, std::move(element));
         }
 
         template <typename... Args>
-        expected<void, VectorError> emplace(size_t index, Args&&... args) {
-            return emplace_impl(index, std::forward<Args>(args)...);
+        void emplace(size_t index, Args&&... args) {
+            if (index > size_) {
+                throw out_of_range("customvector::vector::emplace - index out of bounds");
+            }
+
+            ensure_capacity_for_append();
+
+            if (index == size_) {
+                new (data_ + size_) Element(std::forward<Args>(args)...);
+            } else if constexpr (is_trivially_copyable) {
+                std::memmove(static_cast<void*>(data_ + index + 1),
+                             static_cast<void*>(data_ + index),
+                             (size_ - index) * sizeof(Element));
+                data_[index] = Element(std::forward<Args>(args)...);
+            } else {
+                Element temp(std::forward<Args>(args)...);
+                new (data_ + size_) Element(std::move_if_noexcept(data_[size_ - 1]));
+                for (size_t i = size_ - 1; i > index; --i) {
+                    data_[i] = std::move_if_noexcept(data_[i - 1]);
+                }
+                data_[index] = std::move(temp);
+            }
+            ++size_;
         }
 
         [[nodiscard]] constexpr const Element& at(size_t index) const {
             if (index >= size_) {
-                throw out_of_range("customvector::vector::at-index out of bounds");
+                throw out_of_range("customvector::vector::at - index out of bounds");
             }
             return data_[index];
-        }
-
-        [[nodiscard]] constexpr expected<Element, VectorError>
-        get_checked(size_t index) const requires copy_constructible<Element> {
-            if (index >= size_) {
-                return unexpected(VectorError::IndexOutOfBounds);
-            }
-            return data_[index];
-        }
-
-        [[nodiscard]] constexpr size_t getSize() const noexcept {
-            return size_;
-        }
-
-        [[nodiscard]] constexpr size_t getCapacity() const noexcept {
-            return capacity_;
         }
 
         [[nodiscard]] constexpr size_t size() const noexcept {
@@ -181,7 +178,7 @@ namespace customvector {
 
         // Clear all elements (public)
         void clear() noexcept {
-            destroy_elements(0, size_);
+            destroy_range(data_, size_);
             size_ = 0;
         }
 
@@ -197,7 +194,7 @@ namespace customvector {
                 return;
             }
             if (size_ == 0) {
-                destroy_elements(0, size_);
+                destroy_range(data_, size_);
                 ::operator delete(data_);
                 data_ = nullptr;
                 capacity_ = 0;
@@ -206,13 +203,12 @@ namespace customvector {
             reallocate(size_);
         }
 
-        expected<void, VectorError> pop_back() {
+        void pop_back() {
             if (size_ == 0) {
-                return unexpected(VectorError::Empty);
+                throw out_of_range("customvector::vector::pop_back - vector is empty");
             }
             data_[size_ - 1].~Element();
             --size_;
-            return expected<void, VectorError>{};
         }
 
         [[nodiscard]] constexpr Element* begin() noexcept {
@@ -240,41 +236,6 @@ namespace customvector {
         }
 
     private:
-        template <typename... Args>
-        expected<void, VectorError> emplace_impl(size_t index, Args&&... args) {
-            if (index > size_) {
-                return unexpected(VectorError::IndexOutOfBounds);
-            }
-
-            ensure_capacity_for_append();
-
-            if (index == size_) {
-                new (data_ + size_) Element(std::forward<Args>(args)...);
-                ++size_;
-                return expected<void, VectorError>{};
-            }
-
-            if constexpr (is_trivially_copyable) {
-                const size_t tailCount = size_ - index;
-                if (tailCount > 0) {
-                    std::memmove(static_cast<void*>(data_ + index + 1),
-                                 static_cast<void*>(data_ + index),
-                                 tailCount * sizeof(Element));
-                }
-                data_[index] = Element(std::forward<Args>(args)...);
-            } else {
-                Element temp(std::forward<Args>(args)...);
-
-                new (data_ + size_) Element(std::move_if_noexcept(data_[size_ - 1]));
-                for (size_t i = size_ - 1; i > index; --i) {
-                    data_[i] = std::move_if_noexcept(data_[i - 1]);
-                }
-                data_[index] = std::move(temp);
-            }
-            ++size_;
-            return expected<void, VectorError>{};
-        }
-
         void ensure_capacity_for_append() {
             if (size_ == capacity_) {
                 size_t nextCapacity;
@@ -309,7 +270,7 @@ namespace customvector {
                 ::operator delete(newData);
                 throw;
             }
-            destroy_elements(0, size_);
+            destroy_range(data_, size_);
             ::operator delete(data_);
             data_ = newData;
             capacity_ = newCap;
@@ -323,14 +284,9 @@ namespace customvector {
         }
 
         static void destroy_range(Element* data, size_t count) noexcept {
+            if (!data) return;
             for (size_t i = count; i > 0; --i) {
                 data[i - 1].~Element();
-            }
-        }
-
-        void destroy_elements(size_t from, size_t to) noexcept {
-            for (size_t i = to; i > from; --i) {
-                data_[i - 1].~Element();
             }
         }
 

@@ -2,9 +2,9 @@
  * Unit tests for BaseCase algorithm
  */
 
-#include "../include/algorithms/base_case.hpp"
-#include "../test_helpers/graph_generators.hpp"
-#include "../test_helpers/test_utils.hpp"
+#include "../include/duan_sssp.hpp"
+#include "graph_generators.hpp"
+
 #include <catch_amalgamated.hpp>
 #include <algorithm>
 
@@ -22,7 +22,7 @@ TEST_CASE("BaseCase small k with few vertices", "[base_case]") {
     long double B = 2.5;  // Only reach vertices 0, 1, 2
     vector<int> S = {0};
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE(result_exp.has_value());
     auto result = *result_exp;
 
@@ -47,7 +47,7 @@ TEST_CASE("BaseCase exactly k+1 vertices", "[base_case]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE(result_exp.has_value());
     auto result = *result_exp;
 
@@ -66,7 +66,7 @@ TEST_CASE("BaseCase path graph boundary", "[base_case]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE(result_exp.has_value());
     auto result = *result_exp;
 
@@ -89,7 +89,7 @@ TEST_CASE("BaseCase bounded by B", "[base_case]") {
     long double B = 1.5;  // Only vertex 1 is reachable (dist 1.0 < 1.5)
     vector<int> S = {0};
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE(result_exp.has_value());
     auto result = *result_exp;
 
@@ -108,12 +108,13 @@ TEST_CASE("BaseCase diamond graph with tie-breaking", "[base_case]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE(result_exp.has_value());
     auto result = *result_exp;
 
     // Lexicographic tie-breaking should prefer smaller predecessor (1 < 2)
     REQUIRE(labels.pred[3] == 1);
+    printf("DEBUG: result.b = %Lf\n", result.b);
     REQUIRE(approx_equal(result.b, 2.0));
     REQUIRE(result.U.size() == 3);
 }
@@ -131,7 +132,7 @@ TEST_CASE("BaseCase isolated source", "[base_case]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE(result_exp.has_value());
     auto result = *result_exp;
 
@@ -151,7 +152,7 @@ TEST_CASE("BaseCase large star graph", "[base_case]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE(result_exp.has_value());
     auto result = *result_exp;
 
@@ -175,7 +176,7 @@ TEST_CASE("BaseCase weighted path", "[base_case]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE(result_exp.has_value());
     auto result = *result_exp;
 
@@ -198,7 +199,7 @@ TEST_CASE("BaseCase k=0 edge case", "[base_case]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE(result_exp.has_value());
     auto result = *result_exp;
 
@@ -219,7 +220,7 @@ TEST_CASE("BaseCase error: non-singleton source set", "[base_case][error]") {
     long double B = 10.0;
     vector<int> S = {0, 1};  // Multiple sources
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE_FALSE(result_exp.has_value());
     REQUIRE(result_exp.error() == DuanError::NonSingletonSourceSet);
 }
@@ -232,7 +233,7 @@ TEST_CASE("BaseCase error: source out of bounds", "[base_case][error]") {
     long double B = 10.0;
     vector<int> S = {10};  // Out of bounds
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE_FALSE(result_exp.has_value());
     REQUIRE(result_exp.error() == DuanError::SourceOutOfBounds);
 }
@@ -245,7 +246,7 @@ TEST_CASE("BaseCase error: negative source index", "[base_case][error]") {
     long double B = 10.0;
     vector<int> S = {-1};  // Negative index
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE_FALSE(result_exp.has_value());
     REQUIRE(result_exp.error() == DuanError::SourceOutOfBounds);
 }
@@ -258,7 +259,7 @@ TEST_CASE("BaseCase error: empty source set", "[base_case][error]") {
     long double B = 10.0;
     vector<int> S = {};  // Empty
 
-    auto result_exp = BaseCase::Execute(g, labels, B, S, k);
+    auto result_exp = execute_base_case(g, labels, B, S, k);
     REQUIRE_FALSE(result_exp.has_value());
     REQUIRE(result_exp.error() == DuanError::NonSingletonSourceSet);
 }

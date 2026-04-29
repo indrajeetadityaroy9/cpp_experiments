@@ -1,4 +1,4 @@
-#include "lru.h"
+#include "lru_cache.h"
 #include <iostream>
 #include <memory>
 #include <string>
@@ -12,8 +12,8 @@ int main() {
     (void)cache.set("key2", "value2");
     (void)cache.set("key3", "value3");
 
-    if (auto result = cache.get("key1"); result.has_value()) {
-        cout << "key1: " << result.value() << endl;
+    if (auto result = cache.get("key1"); result != nullptr) {
+        cout << "key1: " << *result << endl;
     } else {
         cout << "key1 missing (error: " << static_cast<int>(result.error()) << ")" << endl;
     }
@@ -34,8 +34,8 @@ int main() {
     (void)ptr_cache.set("ptr1", make_unique<int>(42));
     (void)ptr_cache.set("ptr2", make_unique<int>(100));
 
-    if (auto result = ptr_cache.get_ref("ptr1"); result.has_value()) {
-        cout << "ptr1 value: " << *result.value().get() << endl;
+    if (auto result = ptr_cache.get("ptr1"); result != nullptr) {
+        cout << "ptr1 value: " << **result << endl;
     }
 
     cout << "\n5. Monadic operations:\n";

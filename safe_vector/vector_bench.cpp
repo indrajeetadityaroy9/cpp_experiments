@@ -25,9 +25,9 @@ void pop_or_terminate(Vector& vec) {
     }
 }
 
-// =============================================================================
+
 // Integer benchmarks
-// =============================================================================
+
 TEST_CASE("Vector<int> push_back", "[benchmark][int]") {
     BENCHMARK("custom::vector push_back 5000 ints") {
         customvector::vector<int> vec;
@@ -88,9 +88,9 @@ TEST_CASE("Vector<int> pop_back", "[benchmark][int]") {
     };
 }
 
-// =============================================================================
+
 // String benchmarks
-// =============================================================================
+
 TEST_CASE("Vector<string> push_back", "[benchmark][string]") {
     BENCHMARK("custom::vector push_back 5000 strings") {
         customvector::vector<std::string> vec;
@@ -127,9 +127,9 @@ TEST_CASE("Vector<string> push_back", "[benchmark][string]") {
     };
 }
 
-// =============================================================================
+
 // Large object benchmarks
-// =============================================================================
+
 TEST_CASE("Vector<LargeObject> push_back", "[benchmark][large]") {
     auto make_large = [](int i) {
         LargeObject obj;
@@ -172,9 +172,9 @@ TEST_CASE("Vector<LargeObject> push_back", "[benchmark][large]") {
     };
 }
 
-// =============================================================================
+
 // High-volume benchmarks
-// =============================================================================
+
 TEST_CASE("Vector high volume operations", "[benchmark][volume]") {
     BENCHMARK("custom::vector 20000 int push_back") {
         customvector::vector<int> vec;

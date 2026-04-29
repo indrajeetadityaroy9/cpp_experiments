@@ -2,9 +2,9 @@
  * Unit tests for BMSSP algorithm
  */
 
-#include "../include/algorithms/bmssp.hpp"
-#include "../test_helpers/graph_generators.hpp"
-#include "../test_helpers/test_utils.hpp"
+#include "../include/duan_sssp.hpp"
+#include "graph_generators.hpp"
+
 #include <catch_amalgamated.hpp>
 #include <algorithm>
 
@@ -23,7 +23,7 @@ TEST_CASE("BMSSP layer 0 calls BaseCase", "[bmssp]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = BMSSP::Execute(g, labels, l, B, S, params);
+    auto result = execute_bmssp(g, labels, l, B, S, params);
 
     REQUIRE(result.U.size() > 0);
     REQUIRE(result.b <= B);
@@ -45,7 +45,7 @@ TEST_CASE("BMSSP layer 1 path", "[bmssp]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = BMSSP::Execute(g, labels, l, B, S, params);
+    auto result = execute_bmssp(g, labels, l, B, S, params);
 
     REQUIRE(result.U.size() > 0);
     REQUIRE(labels.dist[0] == 0.0);
@@ -63,7 +63,7 @@ TEST_CASE("BMSSP star graph", "[bmssp]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = BMSSP::Execute(g, labels, l, B, S, params);
+    auto result = execute_bmssp(g, labels, l, B, S, params);
 
     REQUIRE(result.U.size() > 0);
     REQUIRE(labels.dist[0] == 0.0);
@@ -87,7 +87,7 @@ TEST_CASE("BMSSP bounded search", "[bmssp]") {
     long double B = 2.5;
     vector<int> S = {0};
 
-    auto result = BMSSP::Execute(g, labels, l, B, S, params);
+    auto result = execute_bmssp(g, labels, l, B, S, params);
 
     REQUIRE(result.b <= B);
     for (int v : result.U) {
@@ -112,7 +112,7 @@ TEST_CASE("BMSSP diamond graph", "[bmssp]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = BMSSP::Execute(g, labels, l, B, S, params);
+    auto result = execute_bmssp(g, labels, l, B, S, params);
 
     REQUIRE_FALSE(result.U.empty());
 
@@ -138,7 +138,7 @@ TEST_CASE("BMSSP weighted path", "[bmssp]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = BMSSP::Execute(g, labels, l, B, S, params);
+    auto result = execute_bmssp(g, labels, l, B, S, params);
 
     REQUIRE_FALSE(result.U.empty());
     if (labels.dist[0] < INF) REQUIRE(approx_equal(labels.dist[0], 0.0));
@@ -159,7 +159,7 @@ TEST_CASE("BMSSP multiple layers", "[bmssp]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = BMSSP::Execute(g, labels, l, B, S, params);
+    auto result = execute_bmssp(g, labels, l, B, S, params);
 
     REQUIRE(result.U.size() > 0);
 
@@ -185,7 +185,7 @@ TEST_CASE("BMSSP disconnected graph", "[bmssp]") {
     long double B = 10.0;
     vector<int> S = {0};
 
-    auto result = BMSSP::Execute(g, labels, l, B, S, params);
+    auto result = execute_bmssp(g, labels, l, B, S, params);
 
     REQUIRE(approx_equal(labels.dist[0], 0.0));
     REQUIRE(approx_equal(labels.dist[1], 1.0));

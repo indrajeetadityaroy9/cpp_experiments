@@ -1,4 +1,10 @@
-#ifndef DUAN_SSSP_HPP
+import os
+import re
+
+# We will construct include/duan_sssp.hpp
+# and src/duan_sssp.cpp
+
+hpp_content = """#ifndef DUAN_SSSP_HPP
 #define DUAN_SSSP_HPP
 
 #include <vector>
@@ -225,3 +231,8 @@ vector<long double> compute_dijkstra_sssp(const Graph& graph, int source);
 
 }
 #endif
+"""
+
+with open("include/duan_sssp.hpp", "w") as f:
+    f.write(hpp_content)
+

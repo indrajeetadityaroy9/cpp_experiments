@@ -1,7 +1,5 @@
-#ifndef ROBIN_HOOD_TABLE_H
-#define ROBIN_HOOD_TABLE_H
-
-#include "../config/hardware_config.h"
+#ifndef ROBIN_HOOD_H
+#define ROBIN_HOOD_H
 
 #include <array>
 #include <concepts>
@@ -16,11 +14,6 @@ namespace robin_hood {
 // Hash Functions
 // ============================================================================
 
-/**
- * Splitmix64 hash - fast, high-quality hash for integers.
- * ~10 cycles vs ~40 cycles for FNV1a.
- * Used by Java's SplittableRandom, excellent avalanche properties.
- */
 inline uint64_t splitmix64_hash(uint64_t key) noexcept {
     uint64_t z = key + 0x9e3779b97f4a7c15ULL;
     z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
@@ -28,10 +21,6 @@ inline uint64_t splitmix64_hash(uint64_t key) noexcept {
     return z ^ (z >> 31);
 }
 
-/**
- * FNV1a hash - kept for compatibility and testing.
- * Good distribution but slower due to dependency chain.
- */
 inline uint64_t fnv1a_hash(uint64_t key) noexcept {
     constexpr uint64_t FNV_PRIME = 1099511628211ULL;
     constexpr uint64_t FNV_OFFSET = 14695981039346656037ULL;
@@ -66,23 +55,14 @@ concept TableValue = std::movable<T> && std::copyable<T>;
 // Robin Hood Hash Table
 // ============================================================================
 
-/**
- * Cache-optimized Robin Hood hash table for sub-50ns p99 lookup latency.
- *
- * Features:
- * - Fixed capacity (power of 2, minimum 16)
- * - Cache-line aligned buckets (configurable, default auto-detected)
- * - Software prefetch on hot paths
- * - Robin Hood displacement for bounded probe distance
- * - Zero allocation in steady state
- *
- * @tparam Key          Key type (must satisfy TableKey concept)
- * @tparam Value        Value type (must satisfy TableValue concept)
- * @tparam Capacity     Fixed capacity (power of 2, >= 16)
- * @tparam CacheLineSize Cache line size for alignment (auto-detected by default)
- */
+#if defined(__APPLE__) && defined(__aarch64__)
+inline constexpr size_t DEFAULT_CACHE_LINE_SIZE = 128;
+#else
+inline constexpr size_t DEFAULT_CACHE_LINE_SIZE = 64;
+#endif
+
 template<TableKey Key, TableValue Value, size_t Capacity,
-         size_t CacheLineSize = hw::ASSUMED_CACHE_LINE_SIZE>
+         size_t CacheLineSize = DEFAULT_CACHE_LINE_SIZE>
     requires (Capacity >= 16) && is_power_of_two<Capacity>
 class RobinHoodTable {
 
@@ -96,12 +76,11 @@ class RobinHoodTable {
         uint8_t state;
         uint8_t probe_distance;
 
-        // Dynamic padding to fit within cache line
         static constexpr size_t USED_SIZE = sizeof(Key) + sizeof(Value) + 2;
         static constexpr size_t PAD_SIZE =
             (CacheLineSize > USED_SIZE && CacheLineSize <= 128)
             ? (CacheLineSize - USED_SIZE) % CacheLineSize
-            : 6;  // Default padding for oversized cache lines
+            : 6;
 
         uint8_t padding[PAD_SIZE > 0 ? PAD_SIZE : 1];
     };
@@ -109,9 +88,6 @@ class RobinHoodTable {
     alignas(CacheLineSize) std::array<TableBucket, Capacity> buckets_;
     size_t size_;
 
-    /**
-     * Compute hash using fast Splitmix64 for integers, std::hash for others.
-     */
     size_t compute_hash(const Key& key) const noexcept {
         if constexpr (std::is_integral_v<Key>) {
             return splitmix64_hash(static_cast<uint64_t>(key));
@@ -144,7 +120,6 @@ class RobinHoodTable {
             }
 
             idx = (idx + 1) & INDEX_MASK;
-            // Saturate at 255 to prevent uint8_t overflow at extreme load factors
             if (distance < 255) ++distance;
             ++iterations;
         }
@@ -164,59 +139,36 @@ public:
     RobinHoodTable(RobinHoodTable&&) = delete;
     RobinHoodTable& operator=(RobinHoodTable&&) = delete;
 
-    /**
-     * Insert or update a key-value pair.
-     *
-     * Uses Robin Hood invariant for early termination in duplicate check:
-     * If we find a bucket with probe_distance < our current distance,
-     * our key cannot exist beyond that point.
-     *
-     * @return true if new key inserted, false if existing key updated
-     */
     [[nodiscard]] bool put(const Key& key, const Value& value) {
         size_t idx = compute_bucket_index(key);
         uint8_t distance = 0;
 
         __builtin_prefetch(&buckets_[idx], 1, 3);
 
-        // Optimized duplicate check using Robin Hood invariant
         size_t probe_idx = idx;
         while (buckets_[probe_idx].state == BUCKET_OCCUPIED) {
-            // Early termination: if existing key has lower probe_distance,
-            // our key cannot exist beyond this point (Robin Hood property)
             if (buckets_[probe_idx].probe_distance < distance) {
-                break;  // Key definitely not in table
+                break;
             }
 
             if (buckets_[probe_idx].key == key) {
                 buckets_[probe_idx].value = value;
-                return false;  // Updated existing
+                return false;
             }
 
             probe_idx = (probe_idx + 1) & INDEX_MASK;
-            // Saturate at 255 to prevent uint8_t overflow
             if (distance < 255) ++distance;
 
-            // Prefetch next probe position to hide memory latency during linear probing
             __builtin_prefetch(&buckets_[(probe_idx + 1) & INDEX_MASK], 0, 3);
         }
 
-        // Insert new key
         if (!insert_with_displacement(idx, key, value, 0)) {
-            return false;  // Table full
+            return false;
         }
         ++size_;
         return true;
     }
 
-    /**
-     * Lookup a key.
-     *
-     * Uses Robin Hood invariant for early termination:
-     * If distance > bucket's probe_distance, key cannot exist further.
-     *
-     * @return Pointer to value if found, nullptr otherwise
-     */
     [[nodiscard]] Value* get(const Key& key) noexcept {
         size_t idx = compute_bucket_index(key);
 
@@ -233,10 +185,8 @@ public:
             }
 
             idx = (idx + 1) & INDEX_MASK;
-            // Saturate at 255 to prevent uint8_t overflow
             if (distance < 255) ++distance;
 
-            // Prefetch ahead to overlap memory access with comparison operations
             __builtin_prefetch(&buckets_[(idx + 1) & INDEX_MASK], 0, 3);
         }
 
@@ -257,7 +207,6 @@ public:
             }
 
             idx = (idx + 1) & INDEX_MASK;
-            // Saturate at 255 to prevent uint8_t overflow
             if (distance < 255) ++distance;
         }
 
@@ -271,4 +220,4 @@ public:
 
 } // namespace robin_hood
 
-#endif // ROBIN_HOOD_TABLE_H
+#endif // ROBIN_HOOD_H

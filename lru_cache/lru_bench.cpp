@@ -1,4 +1,4 @@
-#include "lru.h"
+#include "lru_cache.h"
 #include <catch_amalgamated.hpp>
 #include <memory>
 #include <string>
@@ -21,7 +21,7 @@ TEST_CASE("LRUCache benchmarks", "[benchmark]") {
         }
         int found = 0;
         for (int i = 0; i < 10000; ++i) {
-            if (cache.get("key" + to_string(i % 1000)).has_value()) {
+            if (cache.get("key" + to_string(i % 1000)) != nullptr) {
                 ++found;
             }
         }

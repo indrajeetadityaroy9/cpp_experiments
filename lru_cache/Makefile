@@ -5,21 +5,18 @@ include ../common.mk
 CXXFLAGS = $(CXXFLAGS_BASE) -pedantic
 
 # Headers
-HEADERS = lru.h lru.tpp
-BASELINE_HEADERS = lru_baseline.h
+HEADERS = lru_cache.h
 
 # Targets
-TARGET = lru_example
-SRCS = main.cpp
+TARGET = lru_demo
+SRCS = lru_demo.cpp
 
 TEST_TARGET = lru_test
 TEST_SRCS = lru_test.cpp
 
-BENCHMARK_TARGET = performance_test
-BENCHMARK_SRCS = performance_test.cpp
+BENCHMARK_TARGET = lru_bench
+BENCHMARK_SRCS = lru_bench.cpp
 
-COMPARATIVE_TARGET = comparative_benchmark
-COMPARATIVE_SRCS = comparative_benchmark.cpp
 
 # Default target
 all: $(TARGET) $(BENCHMARK_TARGET)
@@ -40,14 +37,7 @@ $(BENCHMARK_TARGET): $(BENCHMARK_SRCS) $(HEADERS) $(CATCH2_HPP)
 benchmark: $(BENCHMARK_TARGET)
 	./$(BENCHMARK_TARGET)
 
-# Comparative benchmark (research-level comparison)
-$(COMPARATIVE_TARGET): $(COMPARATIVE_SRCS) $(HEADERS) $(BASELINE_HEADERS)
-	$(CXX) $(CXXFLAGS) -o $@ $(COMPARATIVE_SRCS)
-
-compare: $(COMPARATIVE_TARGET)
-	./$(COMPARATIVE_TARGET)
-
 clean:
-	rm -f $(TARGET) $(TEST_TARGET) $(BENCHMARK_TARGET) $(COMPARATIVE_TARGET) *.d
+	rm -f $(TARGET) $(TEST_TARGET) $(BENCHMARK_TARGET)  *.d
 
 .PHONY: all clean test benchmark compare

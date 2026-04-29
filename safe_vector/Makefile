@@ -9,8 +9,8 @@ TEST_TARGET := vector_test
 TEST_SRCS := vector_test.cpp
 DEPS := vector.hpp
 
-BENCHMARK_TARGET := vector_benchmark
-BENCHMARK_SRCS := benchmark.cpp
+BENCHMARK_TARGET := vector_bench
+BENCHMARK_SRCS := vector_bench.cpp
 
 # Default target
 all: $(TEST_TARGET)

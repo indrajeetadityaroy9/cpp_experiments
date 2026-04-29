@@ -1,13 +1,11 @@
 #define CHECKSUM_AGGREGATION_NO_MAIN
-#include "sum.cpp"
+#include "quotient_block_checksum.cpp"
 
 #include <catch_amalgamated.hpp>
 
-using namespace checksum;
 
-// =============================================================================
 // Reference Implementation
-// =============================================================================
+
 
 namespace {
 
@@ -24,71 +22,9 @@ long long naive_checksum(int n) {
 
 }  // namespace
 
-// =============================================================================
-// Modular Arithmetic Tests
-// =============================================================================
 
-TEST_CASE("Modular addition", "[modular][add]") {
-    SECTION("basic addition") {
-        REQUIRE(add(2, 3) == 5);
-        REQUIRE(add(0, 0) == 0);
-        REQUIRE(add(MOD - 1, 0) == MOD - 1);
-    }
-
-    SECTION("wraps around at MOD") {
-        REQUIRE(add(MOD - 1, 1) == 0);
-        REQUIRE(add(MOD - 1, 2) == 1);
-    }
-
-    SECTION("large values near MOD") {
-        long long a = MOD - 1;
-        long long b = MOD - 1;
-        REQUIRE(add(a, b) == (2 * MOD - 2) % MOD);
-    }
-}
-
-TEST_CASE("Modular subtraction", "[modular][sub]") {
-    SECTION("basic subtraction") {
-        REQUIRE(sub(5, 3) == 2);
-        REQUIRE(sub(10, 0) == 10);
-    }
-
-    SECTION("handles negative wrap") {
-        REQUIRE(sub(0, 1) == MOD - 1);
-        REQUIRE(sub(1, 2) == MOD - 1);
-        REQUIRE(sub(0, MOD - 1) == 1);
-    }
-}
-
-TEST_CASE("Modular multiplication", "[modular][mul]") {
-    SECTION("basic multiplication") {
-        REQUIRE(mul(2, 3) == 6);
-        REQUIRE(mul(0, 1000) == 0);
-        REQUIRE(mul(1, MOD - 1) == MOD - 1);
-    }
-
-    SECTION("large values") {
-        // Verify no overflow for large inputs
-        REQUIRE(mul(MOD - 1, MOD - 1) == 1);  // (-1)^2 = 1 mod MOD
-    }
-}
-
-TEST_CASE("Normalize function", "[modular][normalize]") {
-    SECTION("positive values") {
-        REQUIRE(normalize(5) == 5);
-        REQUIRE(normalize(MOD) == 0);
-        REQUIRE(normalize(MOD + 5) == 5);
-    }
-
-    SECTION("negative values") {
-        REQUIRE(normalize(-1) == MOD - 1);
-        REQUIRE(normalize(-MOD) == 0);
-    }
-}
-
-// =============================================================================
 // Sum Formula Tests
-// =============================================================================
+
 
 TEST_CASE("Triangle number sum (1 + 2 + ... + n)", "[sums][sum_1_to_n]") {
     SECTION("small values") {
@@ -132,9 +68,9 @@ TEST_CASE("Range sums", "[sums][range]") {
     }
 }
 
-// =============================================================================
+
 // Checksum Algorithm Tests
-// =============================================================================
+
 
 TEST_CASE("Checksum edge cases", "[checksum][edge]") {
     SECTION("n = 0") {

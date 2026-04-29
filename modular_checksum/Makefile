@@ -5,8 +5,8 @@ include ../common.mk
 CXXFLAGS = $(CXXFLAGS_BASE) -march=native
 
 # Targets
-TARGET := sum
-SRCS := sum.cpp
+TARGET := quotient_block_checksum
+SRCS := quotient_block_checksum.cpp
 
 TEST_TARGET := sum_test
 TEST_SRCS := sum_test.cpp
