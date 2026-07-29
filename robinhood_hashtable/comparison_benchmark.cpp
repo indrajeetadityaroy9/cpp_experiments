@@ -30,9 +30,9 @@
 #include <sys/resource.h>
 #endif
 
-// ============================================================================
+
 // Timing
-// ============================================================================
+
 namespace timing {
 
 inline volatile const void* escape_sink;
@@ -122,9 +122,9 @@ public:
 
 } // namespace timing
 
-// ============================================================================
+
 // Metrics
-// ============================================================================
+
 namespace metrics {
 
 template<typename T>
@@ -218,9 +218,9 @@ public:
 
 } // namespace metrics
 
-// ============================================================================
+
 // Benchmarking Harness
-// ============================================================================
+
 namespace bench {
 
 struct BenchResult {
@@ -429,9 +429,9 @@ inline AggregatedResult aggregate_trials(const std::vector<BenchResult>& trials)
 
 } // namespace bench
 
-// ============================================================================
+
 // Main Benchmark
-// ============================================================================
+
 
 using namespace robin_hood;
 using namespace bench;
