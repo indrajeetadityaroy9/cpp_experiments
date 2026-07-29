@@ -7,12 +7,11 @@
 #include <cstdint>
 #include <functional>
 #include <type_traits>
+#include <utility>
 
 namespace robin_hood {
 
-// ============================================================================
 // Hash Functions
-// ============================================================================
 
 inline uint64_t splitmix64_hash(uint64_t key) noexcept {
     uint64_t z = key + 0x9e3779b97f4a7c15ULL;
@@ -33,9 +32,9 @@ inline uint64_t fnv1a_hash(uint64_t key) noexcept {
     return hash;
 }
 
-// ============================================================================
+
 // Concepts and Traits
-// ============================================================================
+
 
 template<size_t N>
 constexpr bool is_power_of_two = (N > 0) && ((N & (N - 1)) == 0);
@@ -51,9 +50,9 @@ concept TableKey = Hashable<T> && std::equality_comparable<T>;
 template<typename T>
 concept TableValue = std::movable<T> && std::copyable<T>;
 
-// ============================================================================
+
 // Robin Hood Hash Table
-// ============================================================================
+
 
 #if defined(__APPLE__) && defined(__aarch64__)
 inline constexpr size_t DEFAULT_CACHE_LINE_SIZE = 128;
@@ -61,31 +60,32 @@ inline constexpr size_t DEFAULT_CACHE_LINE_SIZE = 128;
 inline constexpr size_t DEFAULT_CACHE_LINE_SIZE = 64;
 #endif
 
+// Open-addressing table with Robin Hood probing and backshift deletion.
+//
+// Layout: metadata and key/value slots live in two separate dense arrays.
+// meta_[i] encodes both occupancy and probe distance in one byte:
+//   0            -> empty
+//   d + 1        -> occupied, displaced d slots from its home bucket
+//                   (saturates at 255 for pathological chains)
+// Probe loops scan only the metadata array (1 byte per slot, so an entire
+// cache line covers 64+ slots) and touch the slot array once per candidate.
 template<TableKey Key, TableValue Value, size_t Capacity,
          size_t CacheLineSize = DEFAULT_CACHE_LINE_SIZE>
-    requires (Capacity >= 16) && is_power_of_two<Capacity>
+    requires (Capacity >= 16) && is_power_of_two<Capacity> &&
+             is_power_of_two<CacheLineSize>
 class RobinHoodTable {
 
     static constexpr size_t INDEX_MASK = Capacity - 1;
-    static constexpr uint8_t BUCKET_EMPTY = 0;
-    static constexpr uint8_t BUCKET_OCCUPIED = 1;
+    static constexpr uint8_t META_EMPTY = 0;
+    static constexpr uint8_t META_MAX = 255;
 
-    struct TableBucket {
+    struct Slot {
         Key key;
         Value value;
-        uint8_t state;
-        uint8_t probe_distance;
-
-        static constexpr size_t USED_SIZE = sizeof(Key) + sizeof(Value) + 2;
-        static constexpr size_t PAD_SIZE =
-            (CacheLineSize > USED_SIZE && CacheLineSize <= 128)
-            ? (CacheLineSize - USED_SIZE) % CacheLineSize
-            : 6;
-
-        uint8_t padding[PAD_SIZE > 0 ? PAD_SIZE : 1];
     };
 
-    alignas(CacheLineSize) std::array<TableBucket, Capacity> buckets_;
+    alignas(CacheLineSize) std::array<uint8_t, Capacity> meta_;
+    alignas(CacheLineSize) std::array<Slot, Capacity> slots_;
     size_t size_;
 
     size_t compute_hash(const Key& key) const noexcept {
@@ -100,38 +100,33 @@ class RobinHoodTable {
         return compute_hash(key) & INDEX_MASK;
     }
 
-    bool insert_with_displacement(size_t idx, Key key, Value value, uint8_t distance) {
-        size_t iterations = 0;
-        while (iterations < Capacity) {
-            TableBucket& bucket = buckets_[idx];
-
-            if (bucket.state != BUCKET_OCCUPIED) {
-                bucket.key = key;
-                bucket.value = value;
-                bucket.state = BUCKET_OCCUPIED;
-                bucket.probe_distance = distance;
+    // Robin Hood displacement starting at idx with the candidate's current
+    // meta (probe distance + 1). Callers resume from wherever their probe
+    // scan stopped instead of restarting at the home bucket.
+    bool insert_with_displacement(size_t idx, Key key, Value value, uint8_t meta) {
+        for (size_t iterations = 0; iterations < Capacity; ++iterations) {
+            if (meta_[idx] == META_EMPTY) {
+                slots_[idx].key = std::move(key);
+                slots_[idx].value = std::move(value);
+                meta_[idx] = meta;
                 return true;
             }
 
-            if (distance > bucket.probe_distance) {
-                std::swap(key, bucket.key);
-                std::swap(value, bucket.value);
-                std::swap(distance, bucket.probe_distance);
+            if (meta > meta_[idx]) {
+                std::swap(key, slots_[idx].key);
+                std::swap(value, slots_[idx].value);
+                std::swap(meta, meta_[idx]);
             }
 
             idx = (idx + 1) & INDEX_MASK;
-            if (distance < 255) ++distance;
-            ++iterations;
+            if (meta < META_MAX) ++meta;
         }
         return false;
     }
 
 public:
     RobinHoodTable() : size_(0) {
-        for (auto& bucket : buckets_) {
-            bucket.state = BUCKET_EMPTY;
-            bucket.probe_distance = 0;
-        }
+        meta_.fill(META_EMPTY);
     }
 
     RobinHoodTable(const RobinHoodTable&) = delete;
@@ -141,28 +136,21 @@ public:
 
     [[nodiscard]] bool put(const Key& key, const Value& value) {
         size_t idx = compute_bucket_index(key);
-        uint8_t distance = 0;
+        uint8_t meta = 1;
 
-        __builtin_prefetch(&buckets_[idx], 1, 3);
-
-        size_t probe_idx = idx;
-        while (buckets_[probe_idx].state == BUCKET_OCCUPIED) {
-            if (buckets_[probe_idx].probe_distance < distance) {
-                break;
-            }
-
-            if (buckets_[probe_idx].key == key) {
-                buckets_[probe_idx].value = value;
+        // While the resident's probe distance is >= ours, our key may still
+        // be further along the chain; once it drops below, the Robin Hood
+        // invariant guarantees the key is absent and this is the insert point.
+        while (meta_[idx] >= meta) {
+            if (slots_[idx].key == key) {
+                slots_[idx].value = value;
                 return false;
             }
-
-            probe_idx = (probe_idx + 1) & INDEX_MASK;
-            if (distance < 255) ++distance;
-
-            __builtin_prefetch(&buckets_[(probe_idx + 1) & INDEX_MASK], 0, 3);
+            idx = (idx + 1) & INDEX_MASK;
+            if (meta < META_MAX) ++meta;
         }
 
-        if (!insert_with_displacement(idx, key, value, 0)) {
+        if (!insert_with_displacement(idx, key, value, meta)) {
             return false;
         }
         ++size_;
@@ -171,46 +159,56 @@ public:
 
     [[nodiscard]] Value* get(const Key& key) noexcept {
         size_t idx = compute_bucket_index(key);
+        uint8_t meta = 1;
 
-        __builtin_prefetch(&buckets_[idx], 0, 3);
-
-        uint8_t distance = 0;
-        while (buckets_[idx].state == BUCKET_OCCUPIED) {
-            if (distance > buckets_[idx].probe_distance) {
-                return nullptr;
+        while (meta_[idx] >= meta) {
+            if (slots_[idx].key == key) {
+                return &slots_[idx].value;
             }
-
-            if (buckets_[idx].key == key) {
-                return &buckets_[idx].value;
-            }
-
             idx = (idx + 1) & INDEX_MASK;
-            if (distance < 255) ++distance;
-
-            __builtin_prefetch(&buckets_[(idx + 1) & INDEX_MASK], 0, 3);
+            if (meta < META_MAX) ++meta;
         }
-
         return nullptr;
     }
 
     [[nodiscard]] const Value* get(const Key& key) const noexcept {
         size_t idx = compute_bucket_index(key);
+        uint8_t meta = 1;
 
-        uint8_t distance = 0;
-        while (buckets_[idx].state == BUCKET_OCCUPIED) {
-            if (distance > buckets_[idx].probe_distance) {
-                return nullptr;
+        while (meta_[idx] >= meta) {
+            if (slots_[idx].key == key) {
+                return &slots_[idx].value;
             }
-
-            if (buckets_[idx].key == key) {
-                return &buckets_[idx].value;
-            }
-
             idx = (idx + 1) & INDEX_MASK;
-            if (distance < 255) ++distance;
+            if (meta < META_MAX) ++meta;
         }
-
         return nullptr;
+    }
+
+    // Backshift deletion: instead of tombstones, slide every displaced
+    // successor back one slot until a hole or a home-positioned entry.
+    bool erase(const Key& key) noexcept {
+        size_t idx = compute_bucket_index(key);
+        uint8_t meta = 1;
+
+        while (meta_[idx] >= meta) {
+            if (slots_[idx].key == key) {
+                size_t hole = idx;
+                size_t next = (hole + 1) & INDEX_MASK;
+                while (meta_[next] > 1) {
+                    slots_[hole] = std::move(slots_[next]);
+                    meta_[hole] = meta_[next] - 1;
+                    hole = next;
+                    next = (next + 1) & INDEX_MASK;
+                }
+                meta_[hole] = META_EMPTY;
+                --size_;
+                return true;
+            }
+            idx = (idx + 1) & INDEX_MASK;
+            if (meta < META_MAX) ++meta;
+        }
+        return false;
     }
 
     [[nodiscard]] size_t size() const noexcept { return size_; }
