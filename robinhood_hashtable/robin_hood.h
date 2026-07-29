@@ -1,219 +1,217 @@
 #ifndef ROBIN_HOOD_H
 #define ROBIN_HOOD_H
 
+#if !defined(__ARM_NEON) || !defined(__ARM_FEATURE_CRC32)
+#error "robin_hood.h requires ARMv8 NEON and CRC32 extensions"
+#endif
+
+#include <arm_acle.h>
+#include <arm_neon.h>
+
 #include <array>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <type_traits>
 #include <utility>
 
 namespace robin_hood {
-
-// Hash Functions
-
-inline uint64_t splitmix64_hash(uint64_t key) noexcept {
-    uint64_t z = key + 0x9e3779b97f4a7c15ULL;
-    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
-    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
-    return z ^ (z >> 31);
-}
-
-inline uint64_t fnv1a_hash(uint64_t key) noexcept {
-    constexpr uint64_t FNV_PRIME = 1099511628211ULL;
-    constexpr uint64_t FNV_OFFSET = 14695981039346656037ULL;
-
-    uint64_t hash = FNV_OFFSET;
-    for (int i = 0; i < 8; ++i) {
-        hash ^= (key >> (i * 8)) & 0xFF;
-        hash *= FNV_PRIME;
-    }
-    return hash;
-}
-
-
-// Concepts and Traits
-
 
 template<size_t N>
 constexpr bool is_power_of_two = (N > 0) && ((N & (N - 1)) == 0);
 
 template<typename T>
-concept Hashable = std::integral<T> || requires(T a) {
-    { std::hash<T>{}(a) } -> std::convertible_to<size_t>;
-};
+concept TableKey = std::integral<T>;
 
+// Values live in a default-constructed in-object array and are moved during
+// shifts, so they must be movable and default-initializable.
 template<typename T>
-concept TableKey = Hashable<T> && std::equality_comparable<T>;
+concept TableValue = std::movable<T> && std::default_initializable<T>;
 
-template<typename T>
-concept TableValue = std::movable<T> && std::copyable<T>;
-
-
-// Robin Hood Hash Table
-
-
-#if defined(__APPLE__) && defined(__aarch64__)
-inline constexpr size_t DEFAULT_CACHE_LINE_SIZE = 128;
-#else
-inline constexpr size_t DEFAULT_CACHE_LINE_SIZE = 64;
-#endif
-
-// Open-addressing table with Robin Hood probing and backshift deletion.
+// Fixed-capacity open-addressing table: Robin Hood linear probing where the
+// ordering invariant itself is the SIMD predicate ("vectorized invariant
+// probing").
 //
-// Layout: metadata and key/value slots live in two separate dense arrays.
-// meta_[i] encodes both occupancy and probe distance in one byte:
-//   0            -> empty
-//   d + 1        -> occupied, displaced d slots from its home bucket
-//                   (saturates at 255 for pathological chains)
-// Probe loops scan only the metadata array (1 byte per slot, so an entire
-// cache line covers 64+ slots) and touch the slot array once per candidate.
-template<TableKey Key, TableValue Value, size_t Capacity,
-         size_t CacheLineSize = DEFAULT_CACHE_LINE_SIZE>
-    requires (Capacity >= 16) && is_power_of_two<Capacity> &&
-             is_power_of_two<CacheLineSize>
+// meta_[i] is one byte: 0 = empty, d+1 = occupied with displacement d from
+// its home bucket. Two invariants hold across all operations:
+//   (1) home buckets are non-decreasing along any probe run,
+//   (2) runs are gap-free (backshift deletion, no tombstones).
+// Consequently, for a probe of home bucket h, comparing 16 metadata bytes
+// against the ramp {off+1} decides everything in one NEON instruction pair:
+//   meta == ramp  <=>  the entry's home bucket is exactly h (must key-compare),
+//   meta <  ramp  <=>  no key homed at h can appear at or beyond this offset
+//                      (empty slots are the meta==0 case of the same test).
+template<TableKey Key, TableValue Value, size_t Capacity>
+    requires (Capacity >= 16) && is_power_of_two<Capacity>
 class RobinHoodTable {
 
     static constexpr size_t INDEX_MASK = Capacity - 1;
-    static constexpr uint8_t META_EMPTY = 0;
-    static constexpr uint8_t META_MAX = 255;
+    // A NEON register scans 16 metadata bytes at a time.
+    static constexpr size_t GROUP = 16;
+    // Every ramp value (offset+1) must be an exact uint8: the probe window is
+    // capped at the largest whole-group count whose ramp stays <= 255.
+    static constexpr size_t MAX_WINDOW = (255 / GROUP) * GROUP;
+    // A below-event is guaranteed at offset cap+1 (ramp cap+2 exceeds every
+    // legal meta), so the displacement cap is window-2; displacement is also
+    // bounded by Capacity-1 in any table.
+    static constexpr size_t MAX_DISPLACEMENT = MAX_WINDOW - 2 < Capacity - 1
+                                                   ? MAX_WINDOW - 2
+                                                   : Capacity - 1;
+    // Probe window in whole groups; also the length of the wraparound mirror.
+    static constexpr size_t WINDOW =
+        (MAX_DISPLACEMENT + 2 + GROUP - 1) / GROUP * GROUP;
 
     struct Slot {
         Key key;
         Value value;
     };
 
-    alignas(CacheLineSize) std::array<uint8_t, Capacity> meta_;
-    alignas(CacheLineSize) std::array<Slot, Capacity> slots_;
+    // meta_ carries a WINDOW-byte mirror of its prefix so NEON group loads
+    // never wrap; slots_ is indexed with masked indices and needs no mirror.
+    alignas(16) std::array<uint8_t, Capacity + WINDOW> meta_;
+    alignas(16) std::array<Slot, Capacity> slots_;
     size_t size_;
 
-    size_t compute_hash(const Key& key) const noexcept {
-        if constexpr (std::is_integral_v<Key>) {
-            return splitmix64_hash(static_cast<uint64_t>(key));
-        } else {
-            return std::hash<Key>{}(key);
+    // Sole writer of metadata: updates the base byte and every mirror copy
+    // (Capacity < WINDOW means a base index can have several copies).
+    void set_meta(size_t i, uint8_t v) noexcept {
+        for (size_t j = i; j < Capacity + WINDOW; j += Capacity) {
+            meta_[j] = v;
         }
     }
 
-    size_t compute_bucket_index(const Key& key) const noexcept {
-        return compute_hash(key) & INDEX_MASK;
+    size_t home_bucket(Key key) const noexcept {
+        return __crc32cd(0, static_cast<uint64_t>(key)) & INDEX_MASK;
     }
 
-    // Robin Hood displacement starting at idx with the candidate's current
-    // meta (probe distance + 1). Callers resume from wherever their probe
-    // scan stopped instead of restarting at the home bucket.
-    bool insert_with_displacement(size_t idx, Key key, Value value, uint8_t meta) {
-        for (size_t iterations = 0; iterations < Capacity; ++iterations) {
-            if (meta_[idx] == META_EMPTY) {
-                slots_[idx].key = std::move(key);
-                slots_[idx].value = std::move(value);
-                meta_[idx] = meta;
-                return true;
-            }
+    // One bit per lane (bit 4*lane) from a NEON byte-comparison result.
+    static uint64_t lane_bits(uint8x16_t cmp) noexcept {
+        const uint8x8_t nibbles = vshrn_n_u16(vreinterpretq_u16_u8(cmp), 4);
+        return vget_lane_u64(vreinterpret_u64_u8(nibbles), 0) &
+               0x1111111111111111ULL;
+    }
 
-            if (meta > meta_[idx]) {
-                std::swap(key, slots_[idx].key);
-                std::swap(value, slots_[idx].value);
-                std::swap(meta, meta_[idx]);
-            }
+    struct Probe {
+        size_t idx;    // slot of the found key, or the insertion point
+        uint8_t meta;  // 0 = found at idx; else displacement+1 to store there
+    };
 
-            idx = (idx + 1) & INDEX_MASK;
-            if (meta < META_MAX) ++meta;
+    // The single probe primitive behind get/put/erase. (A scalar
+    // displacement-0 peek was measured and rejected: +26% at 50% load but
+    // -6..8% at 85-90% where the peek branch mispredicts.)
+    Probe find_slot(Key key, size_t h) const noexcept {
+        alignas(16) static constexpr uint8_t RAMP0[GROUP] = {
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+        const uint8x16_t ramp0 = vld1q_u8(RAMP0);
+
+        for (size_t g = 0; g < WINDOW; g += GROUP) {
+            const uint8x16_t meta = vld1q_u8(meta_.data() + h + g);
+            const uint8x16_t ramp =
+                vaddq_u8(ramp0, vdupq_n_u8(static_cast<uint8_t>(g)));
+            uint64_t match = lane_bits(vceqq_u8(meta, ramp));
+            const uint64_t below = lane_bits(vcltq_u8(meta, ramp));
+            if (below) {
+                // Matches at or after the first below-lane belong to later
+                // runs (invariant 1) and must be ignored.
+                match &= (below & -below) - 1;
+            }
+            while (match) {
+                const size_t idx =
+                    (h + g + (static_cast<size_t>(__builtin_ctzll(match)) >> 2)) &
+                    INDEX_MASK;
+                if (slots_[idx].key == key) {
+                    return {idx, 0};
+                }
+                match &= match - 1;
+            }
+            if (below) {
+                const size_t off =
+                    g + (static_cast<size_t>(__builtin_ctzll(below)) >> 2);
+                return {(h + off) & INDEX_MASK, static_cast<uint8_t>(off + 1)};
+            }
         }
-        return false;
+        // Unreachable: every meta is <= MAX_DISPLACEMENT+1 (insert cap), and
+        // the ramp exceeds that value within WINDOW.
+        __builtin_unreachable();
     }
 
 public:
-    RobinHoodTable() : size_(0) {
-        meta_.fill(META_EMPTY);
-    }
+    RobinHoodTable() : size_(0) { meta_.fill(0); }
 
     RobinHoodTable(const RobinHoodTable&) = delete;
     RobinHoodTable& operator=(const RobinHoodTable&) = delete;
     RobinHoodTable(RobinHoodTable&&) = delete;
     RobinHoodTable& operator=(RobinHoodTable&&) = delete;
 
-    [[nodiscard]] bool put(const Key& key, const Value& value) {
-        size_t idx = compute_bucket_index(key);
-        uint8_t meta = 1;
-
-        // While the resident's probe distance is >= ours, our key may still
-        // be further along the chain; once it drops below, the Robin Hood
-        // invariant guarantees the key is absent and this is the insert point.
-        while (meta_[idx] >= meta) {
-            if (slots_[idx].key == key) {
-                slots_[idx].value = value;
-                return false;
-            }
-            idx = (idx + 1) & INDEX_MASK;
-            if (meta < META_MAX) ++meta;
+    // After put returns true, key maps to value (insert or update). False
+    // means the table could not place the key: it is full, or the insertion
+    // would push some displacement past MAX_DISPLACEMENT ("effectively
+    // full"); the table is unchanged in that case.
+    bool put(Key key, Value value) {
+        const Probe p = find_slot(key, home_bucket(key));
+        if (p.meta == 0) {
+            slots_[p.idx].value = std::move(value);
+            return true;
         }
-
-        if (!insert_with_displacement(idx, key, value, meta)) {
+        if (size_ == Capacity || p.meta - 1u > MAX_DISPLACEMENT) {
             return false;
         }
+
+        // Phase 1 (no mutation): find the first empty slot at or after the
+        // insertion point; every resident in between will shift one slot,
+        // so none may already sit at the displacement cap.
+        size_t empty = p.idx;
+        while (meta_[empty] != 0) {
+            if (meta_[empty] > MAX_DISPLACEMENT) {
+                return false;
+            }
+            empty = (empty + 1) & INDEX_MASK;
+        }
+
+        // Phase 2: shift [insertion point, empty) right by one, back to
+        // front, then place the new entry.
+        for (size_t dst = empty; dst != p.idx;) {
+            const size_t src = (dst + Capacity - 1) & INDEX_MASK;
+            slots_[dst] = std::move(slots_[src]);
+            set_meta(dst, static_cast<uint8_t>(meta_[src] + 1));
+            dst = src;
+        }
+        slots_[p.idx].key = key;
+        slots_[p.idx].value = std::move(value);
+        set_meta(p.idx, p.meta);
         ++size_;
         return true;
     }
 
-    [[nodiscard]] Value* get(const Key& key) noexcept {
-        size_t idx = compute_bucket_index(key);
-        uint8_t meta = 1;
-
-        while (meta_[idx] >= meta) {
-            if (slots_[idx].key == key) {
-                return &slots_[idx].value;
-            }
-            idx = (idx + 1) & INDEX_MASK;
-            if (meta < META_MAX) ++meta;
-        }
-        return nullptr;
+    const Value* get(Key key) const noexcept {
+        const Probe p = find_slot(key, home_bucket(key));
+        return p.meta == 0 ? &slots_[p.idx].value : nullptr;
     }
 
-    [[nodiscard]] const Value* get(const Key& key) const noexcept {
-        size_t idx = compute_bucket_index(key);
-        uint8_t meta = 1;
-
-        while (meta_[idx] >= meta) {
-            if (slots_[idx].key == key) {
-                return &slots_[idx].value;
-            }
-            idx = (idx + 1) & INDEX_MASK;
-            if (meta < META_MAX) ++meta;
-        }
-        return nullptr;
+    Value* get(Key key) noexcept {
+        return const_cast<Value*>(std::as_const(*this).get(key));
     }
 
-    // Backshift deletion: instead of tombstones, slide every displaced
-    // successor back one slot until a hole or a home-positioned entry.
-    bool erase(const Key& key) noexcept {
-        size_t idx = compute_bucket_index(key);
-        uint8_t meta = 1;
-
-        while (meta_[idx] >= meta) {
-            if (slots_[idx].key == key) {
-                size_t hole = idx;
-                size_t next = (hole + 1) & INDEX_MASK;
-                while (meta_[next] > 1) {
-                    slots_[hole] = std::move(slots_[next]);
-                    meta_[hole] = meta_[next] - 1;
-                    hole = next;
-                    next = (next + 1) & INDEX_MASK;
-                }
-                meta_[hole] = META_EMPTY;
-                --size_;
-                return true;
-            }
-            idx = (idx + 1) & INDEX_MASK;
-            if (meta < META_MAX) ++meta;
+    // Backshift deletion: slide displaced successors back one slot until a
+    // hole or an at-home entry, preserving both probe invariants.
+    bool erase(Key key) noexcept {
+        const Probe p = find_slot(key, home_bucket(key));
+        if (p.meta != 0) {
+            return false;
         }
-        return false;
+        size_t hole = p.idx;
+        for (size_t next = (hole + 1) & INDEX_MASK; meta_[next] > 1;
+             next = (hole + 1) & INDEX_MASK) {
+            slots_[hole] = std::move(slots_[next]);
+            set_meta(hole, static_cast<uint8_t>(meta_[next] - 1));
+            hole = next;
+        }
+        set_meta(hole, 0);
+        --size_;
+        return true;
     }
 
-    [[nodiscard]] size_t size() const noexcept { return size_; }
-    [[nodiscard]] static constexpr size_t capacity() noexcept { return Capacity; }
-    [[nodiscard]] static constexpr size_t cache_line_size() noexcept { return CacheLineSize; }
+    size_t size() const noexcept { return size_; }
+    static constexpr size_t capacity() noexcept { return Capacity; }
 };
 
 } // namespace robin_hood

@@ -112,7 +112,7 @@ class CycleTimer {
 
 public:
     CycleTimer() : start_ticks_(read_timestamp_ticks()) {}
-    [[nodiscard]] double elapsed_ns() const noexcept {
+    double elapsed_ns() const noexcept {
         uint64_t elapsed_ticks = read_timestamp_ticks() - start_ticks_;
         return static_cast<double>(elapsed_ticks) * ns_per_tick_.load(std::memory_order_acquire);
     }
@@ -128,7 +128,7 @@ public:
 namespace metrics {
 
 template<typename T>
-[[nodiscard]] inline double compute_percentile_interpolated(const std::vector<T>& sorted_samples_ns, double percentile_fraction) {
+inline double compute_percentile_interpolated(const std::vector<T>& sorted_samples_ns, double percentile_fraction) {
     if (sorted_samples_ns.empty()) return 0.0;
     if (sorted_samples_ns.size() == 1) return static_cast<double>(sorted_samples_ns[0]);
 
@@ -159,7 +159,7 @@ public:
     }
     inline void record(uint64_t latency_ns) noexcept { latency_samples_ns_[sample_count_++] = latency_ns; }
     void reset() noexcept { sample_count_ = 0; }
-    [[nodiscard]] LatencyStats compute_stats(bool remove_outliers = false) const {
+    LatencyStats compute_stats(bool remove_outliers = false) const {
         LatencyStats stats{};
         if (sample_count_ == 0) return stats;
 
@@ -445,10 +445,10 @@ template<size_t Cap>
 BenchResult benchmark_robin_hood(const std::vector<uint64_t>& keys, double load_factor, const BenchConfig& cfg) {
     RobinHoodTable<uint64_t, uint64_t, Cap> table;
     size_t num_keys = static_cast<size_t>(load_factor * Cap);
-    for (size_t i = 0; i < num_keys && i < keys.size(); ++i) (void)table.put(keys[i], keys[i]);
+    for (size_t i = 0; i < num_keys && i < keys.size(); ++i) table.put(keys[i], keys[i]);
     return run_benchmark(table, keys, num_keys,
         [](auto& t, uint64_t k) { escape_sink = t.get(k); },
-        [](auto& t, uint64_t k, uint64_t v) { (void)t.put(k, v); }, cfg);
+        [](auto& t, uint64_t k, uint64_t v) { t.put(k, v); }, cfg);
 }
 
 BenchResult benchmark_std(const std::vector<uint64_t>& keys, double load_factor, const BenchConfig& cfg) {
